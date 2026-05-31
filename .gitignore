@@ -1,0 +1,75 @@
+# ============================================
+# 数智心屿 .gitignore
+# 规则：环境变量、密钥、大文件、构建产物、平台杂物
+# ============================================
+
+# ---- 环境变量 & 密钥（绝对不能上传！） ----
+.env
+.env.local
+.env.*.local
+*.env
+backend/.env
+backend/.env.*
+*secret*
+*credentials*
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# ---- Node.js / 前端构建 ----
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# ---- 大模型文件（队员从其他渠道分发，避免仓库膨胀） ----
+*.glb
+*.gltf
+*.fbx
+*.blend
+*.blend1
+
+# ---- KTX2 transcoder（公共资源，部署时单独放） ----
+frontend/public/basis/
+frontend/dist/basis/
+
+# ---- 音频测试文件 ----
+*.mp3
+*.wav
+*.webm
+*.m4a
+*.ogg
+# 例外：UI 用的提示音如果有，要手动 git add -f
+
+# ---- Rhubarb 二进制（任务 1 用，未来上线再加） ----
+backend/bin/
+
+# ---- 报告 / 临时文档（生成物，不入库） ----
+*.docx
+~$*.docx
+*.tmp
+*.bak
+
+# ---- 系统 / IDE 杂物 ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- 日志 ----
+*.log
+logs/
+npm-debug.log*
+
+# ---- 子目录 .gitignore 仍保留（backend/.gitignore、frontend/.gitignore） ----

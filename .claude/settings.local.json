@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5000/api/health\" -TimeoutSec 5 -UseBasicParsing; \"OK: $\\($r.Content\\)\" } catch { \"失败: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "PowerShell(\"�������\")",
+      "PowerShell(Start-Sleep -Seconds 3; $env:PYTHONIOENCODING = \"utf-8\"; Push-Location backend; py -X utf8 app.py; Pop-Location)",
+      "PowerShell($src = \"frontend\\\\node_modules\\\\three\\\\examples\\\\jsm\\\\libs\\\\basis\"; $dst = \"frontend\\\\public\\\\basis\"; if \\(Test-Path $src\\) { Copy-Item $src $dst -Recurse -Force; \"已复制 basis 文件夹\"; Get-ChildItem $dst | Select-Object Name, @{n='KB';e={[math]::Round\\($_.Length/1KB, 1\\)}} } else { \"❌ 源目录不存在: $src\" })",
+      "PowerShell($ErrorActionPreference='SilentlyContinue'; Write-Output \"== 检查 MySQL 是否已安装 ==\"; & mysql --version; Write-Output \"== 检查 MySQL 安装目录 ==\"; Get-ChildItem 'C:\\\\Program Files\\\\MySQL' -ErrorAction SilentlyContinue | Select-Object Name; Write-Output \"== 检查 DBeaver ==\"; Get-ChildItem 'C:\\\\Program Files\\\\DBeaver' -ErrorAction SilentlyContinue | Select-Object Name; Write-Output \"== 当前用户 Downloads 目录 ==\"; $dl=\"$env:USERPROFILE\\\\Downloads\"; Write-Output $dl; Test-Path $dl; Write-Output \"== 桌面路径 ==\"; [Environment]::GetFolderPath\\('Desktop'\\))",
+      "PowerShell(& winget --version)",
+      "PowerShell(& winget search \"Oracle.MySQL\" --accept-source-agreements 2>&1)",
+      "PowerShell(& winget search \"dbeaver\" 2>&1)",
+      "Skill(anthropic-skills:docx)",
+      "Skill(anthropic-skills:docx:*)",
+      "WebFetch(domain:wj.qq.com)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate"
+    ]
+  }
+}
