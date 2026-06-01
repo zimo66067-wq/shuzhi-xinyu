@@ -193,7 +193,7 @@ def _validate_messages(messages) -> list[dict]:
 
 def _truncate_history(messages: list[dict]) -> list[dict]:
     """
-    C1 修复：保留最近 N 条，且确保首条是 user（兼容 Gemini）。
+    C1 修复：保留最近 N 条，且确保首条是 user。
     """
     if len(messages) <= MAX_HISTORY_TURNS:
         return messages

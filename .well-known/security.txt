@@ -1,0 +1,10 @@
+# 数智心屿 · 安全漏洞上报联系方式
+# 格式遵循 RFC 9116 (https://www.rfc-editor.org/rfc/rfc9116)
+# 此文件应部署在 /.well-known/security.txt 路径下
+
+Contact: https://github.com/zimo66067-wq/shuzhi-xinyu/security/advisories/new
+Contact: https://github.com/zimo66067-wq/shuzhi-xinyu/issues
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: zh-CN, en
+Policy: https://github.com/zimo66067-wq/shuzhi-xinyu/blob/main/SECURITY.md
+Canonical: https://github.com/zimo66067-wq/shuzhi-xinyu/blob/main/.well-known/security.txt

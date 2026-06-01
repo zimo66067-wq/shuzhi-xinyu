@@ -1,15 +1,18 @@
 from dotenv import load_dotenv
 load_dotenv()
 """
-app.py — 数智心屿 AI Demo 的 Flask 入口
-提供三个 API 端点：对话 / 评分 / 报告
+app.py — 数智心屿 AI 后端 Flask 入口
+提供 API 端点：对话 / 评分 / 报告 / TTS / STT / 家长鉴权 / 健康检查
 
 启动方式：
   python app.py
-  （默认监听 http://localhost:5000）
+  （默认监听 http://127.0.0.1:5000）
 
 前置条件：
-  环境变量 DEEPSEEK_API_KEY（必须）或 GEMINI_API_KEY（备选）
+  在 backend/.env 配置：
+    - DEEPSEEK_API_KEY（必须，对话/评分/报告主模型）
+    - TENCENT_SECRET_ID / TENCENT_SECRET_KEY（必须，TTS / ASR）
+    - PARENT_PASSWORD（生产环境务必修改默认值）
 """
 
 import hashlib
@@ -493,10 +496,21 @@ def health():
 # ── 启动 ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    has_key = bool(os.environ.get("DEEPSEEK_API_KEY"))
-    if not has_key:
+    # 启动前置检查
+    if not os.environ.get("DEEPSEEK_API_KEY"):
         print("⚠️  未检测到 DEEPSEEK_API_KEY 环境变量。")
         print("   请在 backend/.env 配置后再启动，否则对话 API 将不可用。")
+        print()
+
+    # 低危 #15：默认家长密码警告（部署到公网前必须改）
+    if PARENT_PASSWORD == "1234":
+        print("=" * 60)
+        print("⚠️  警告：当前家长密码仍为默认值 '1234'")
+        print("   该密码只适合本地试用。部署到公网前必须改：")
+        print("   1. 编辑 backend/.env")
+        print("   2. 设置 PARENT_PASSWORD=你的强密码")
+        print("   3. 同时建议设置 PARENT_SECRET（≥32 字节十六进制）")
+        print("=" * 60)
         print()
 
     # 默认仅本机访问；生产环境用 gunicorn/uwsgi 启动，由 nginx 反代
@@ -508,4 +522,6 @@ if __name__ == "__main__":
     print(f"🚀 数智心屿 AI 后端启动：http://{host}:{port}  (debug={debug})")
     if debug:
         print("⚠️  DEBUG 模式开启，仅限本地开发，绝不可暴露到公网！")
+    if host == "0.0.0.0":
+        print("⚠️  正在监听 0.0.0.0（所有网卡）。生产环境请改回 127.0.0.1 + nginx 反代。")
     app.run(host=host, port=port, debug=debug)
