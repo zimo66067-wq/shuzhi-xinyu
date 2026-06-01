@@ -85,6 +85,64 @@ def _require_parent_auth():
     if not _verify_parent_token(token):
         abort(401, description="parent auth required")
 
+
+# ── 安全：所有响应附加安全 HTTP 头（中危 #9） ──────────────────────────────
+@app.after_request
+def _add_security_headers(resp):
+    """
+    给每个响应加默认安全头。
+    - X-Content-Type-Options: nosniff   防 MIME sniffing
+    - X-Frame-Options: DENY              防点击劫持 / iframe 嵌入
+    - Referrer-Policy: no-referrer       不向第三方泄漏 URL
+    - Permissions-Policy                 默认禁用所有敏感 API（除麦克风，前端需要）
+    - Content-Security-Policy            JSON API 默认极严；首页用宽松版（含 inline）
+    """
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    resp.headers.setdefault(
+        "Permissions-Policy",
+        "geolocation=(), camera=(), payment=(), usb=(), microphone=(self)"
+    )
+    # CSP：API 端点不渲染内容，给最严格；首页 HTML 内嵌脚本，需放宽 inline
+    if request.path == "/":
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+    else:
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'none'; frame-ancestors 'none';"
+        )
+    return resp
+
+
+# ── 安全：CSRF Origin 校验（中危 #10） ─────────────────────────────────────
+# 对所有改变状态的方法（POST/PUT/PATCH/DELETE）校验 Origin。
+# 同源浏览器请求（无 Origin 头）放行；跨源必须在 CORS 白名单内。
+_CSRF_EXEMPT_PATHS = {"/api/health"}  # GET 已是只读，无需检查
+
+
+@app.before_request
+def _csrf_origin_check():
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if request.path in _CSRF_EXEMPT_PATHS:
+        return
+    origin = request.headers.get("Origin")
+    # 无 Origin 头 → 通常是 curl/同源 fetch 或浏览器扩展；保持现状放行
+    # （CORS 已挡了 XHR 跨源；这里主要防 form-submit 类老式 CSRF）
+    if origin is None:
+        return
+    if origin not in _origins:
+        abort(403, description="origin not allowed")
+
 # ── 首页 ────────────────────────────────────────────────────────────────────
 
 HOME_HTML = """<!DOCTYPE html>
@@ -406,6 +464,16 @@ def _too_large(e):
 @app.errorhandler(401)
 def _unauthorized(e):
     return jsonify({"error": "unauthorized"}), 401
+
+
+@app.errorhandler(403)
+def _forbidden(e):
+    return jsonify({"error": "forbidden"}), 403
+
+
+@app.errorhandler(415)
+def _unsupported_media(e):
+    return jsonify({"error": "unsupported media type"}), 415
 
 
 @app.errorhandler(429)

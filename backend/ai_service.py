@@ -128,10 +128,40 @@ def _load_prompt(filename: str) -> str:
         return f.read()
 
 
+# 中危 #11：单条 user 消息长度上限（防止超长输入烧 token / 滥用）
+MAX_USER_CONTENT_LEN = 500
+
+# 中危 #11：常见 prompt 注入模式（命中后做温和拒绝，不发给 LLM）
+# 只针对 user role；assistant/system 信任来自后端构造
+_INJECTION_PATTERNS = [
+    re.compile(r"忽略[\s\S]{0,8}(之前|以前|上面|所有)[\s\S]{0,8}(指令|规则|提示|prompt)", re.IGNORECASE),
+    re.compile(r"ignore\s+(all|previous|prior|above)\s+(instructions?|prompts?|rules?)", re.IGNORECASE),
+    re.compile(r"你\s*现在\s*是\s*[一]?个", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+a\s+", re.IGNORECASE),
+    re.compile(r"假装|pretend\s+to\s+be", re.IGNORECASE),
+    re.compile(r"system\s*[:：]\s*", re.IGNORECASE),
+    re.compile(r"</?\s*(system|user|assistant)\s*>", re.IGNORECASE),
+    re.compile(r"\[\s*INST\s*\]", re.IGNORECASE),
+]
+
+
+def _looks_like_injection(text: str) -> bool:
+    """检测明显的 prompt 注入尝试。命中返回 True。"""
+    if not text:
+        return False
+    for pat in _INJECTION_PATTERNS:
+        if pat.search(text):
+            return True
+    return False
+
+
 def _validate_messages(messages) -> list[dict]:
     """
-    A1 + A3 修复：校验并清洗 messages 输入。
-    丢弃缺字段、非法 role、空 content 的项；非 list 输入返回 []。
+    A1 + A3 修复 + 中危 #11：
+    - 丢弃缺字段、非法 role、空 content 的项
+    - user 消息超长直接截断
+    - user 消息命中注入模式直接丢弃（不让其污染 LLM 上下文）
+    - 非 list 输入返回 []
     """
     if not isinstance(messages, list):
         return []
@@ -146,6 +176,17 @@ def _validate_messages(messages) -> list[dict]:
         content = str(content).strip()
         if not content:
             continue
+
+        # user 消息特殊处理（最不可信）
+        if role == "user":
+            # 长度截断（超出部分悄悄截掉，不报错）
+            if len(content) > MAX_USER_CONTENT_LEN:
+                content = content[:MAX_USER_CONTENT_LEN]
+            # 注入检测：命中则不放进 messages，回头返回温和拒绝
+            if _looks_like_injection(content):
+                cleaned.append({"role": role, "content": "__INJECTION_BLOCKED__", "_blocked": True})
+                continue
+
         cleaned.append({"role": role, "content": content})
     return cleaned
 
@@ -194,7 +235,9 @@ def _validate_and_repair_score(parsed) -> dict:
     缺维度自动补 3 分；分数超界 clip 到 1-5；total_score 强制重算。
     """
     if not isinstance(parsed, dict):
-        return {"total_score": 0, "error": "返回不是 JSON 对象", "raw": str(parsed)}
+        # 中危 #8：不再返回 raw（避免泄漏 LLM 原文 / fingerprint 模型）
+        print(f"[score] parsed not dict: {str(parsed)[:200]}", flush=True)
+        return {"total_score": 0, "error": "解析失败"}
 
     dims_raw = parsed.get("dimensions", {})
     if not isinstance(dims_raw, dict):
@@ -283,8 +326,22 @@ def chat(messages) -> dict:
     ASD 约束对话。
     输入校验失败时返回友好兜底，不抛异常。
     任务 3：从首条 system message 抽取年龄并注入 {age_band} 占位符。
+    中危 #11：最新一条 user 消息若被注入检测拦截，直接返回温和拒绝，不调 LLM。
     """
     cleaned = _validate_messages(messages)
+    if not cleaned:
+        return {"reply": "你好。我在这里。"}
+
+    # 中危 #11：最后一条若是被拦截的 user 注入，直接温和拒绝
+    last = cleaned[-1]
+    if last.get("role") == "user" and last.get("_blocked"):
+        return {
+            "reply": "我们就聊聊你今天的事吧。",
+            "stage": None,
+            "age_band": None,
+        }
+    # 过滤掉被标记的注入条目，再继续
+    cleaned = [{"role": m["role"], "content": m["content"]} for m in cleaned if not m.get("_blocked")]
     if not cleaned:
         return {"reply": "你好。我在这里。"}
 
@@ -340,7 +397,9 @@ def score(messages, level=None) -> dict:
     try:
         parsed = json.loads(_strip_json_fence(raw))
     except json.JSONDecodeError:
-        return {"total_score": 0, "error": "解析失败", "raw": raw}
+        # 中危 #8：内部日志保留原文，对外不暴露
+        print(f"[score] JSONDecodeError raw={raw[:200]}", flush=True)
+        return {"total_score": 0, "error": "解析失败"}
 
     # 校验并修复
     result = _validate_and_repair_score(parsed)
