@@ -301,7 +301,8 @@ def api_chat():
     """
     data = request.get_json(silent=True) or {}
     messages = data.get("messages", [])
-    result = chat(messages)
+    scenario = data.get("scenario")  # 任务 7：可选场景标识，如 "supermarket"
+    result = chat(messages, scenario=scenario)
     return jsonify(result)
 
 

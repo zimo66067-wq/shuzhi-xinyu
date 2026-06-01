@@ -32,6 +32,15 @@ BLOCKED_WORDS = [
 VALID_STAGES = {"welcome", "free_chat", "emotion_guide", "scenario_test", "ending"}
 STAGE_PATTERN = re.compile(r"\[STAGE\s*:\s*(\w+)\s*\]\s*$", re.IGNORECASE)
 
+# 任务 7 场景子阶段：合法值
+VALID_SCENES = {"enter", "find", "ask_price", "pay", "leave", "end"}
+SCENE_PATTERN = re.compile(r"\[SCENE\s*:\s*(\w+)\s*\]\s*$", re.IGNORECASE)
+
+# 任务 7 已支持的场景 → prompt 文件名映射
+SCENARIO_PROMPTS = {
+    "supermarket": "prompt_scenario_supermarket.txt",
+}
+
 # 任务 3 多年龄分档：从 system message "X 岁" 抽取年龄并归档
 AGE_PATTERN = re.compile(r"(\d+)\s*岁")
 
@@ -84,6 +93,25 @@ def _extract_age_band(messages: list[dict]) -> str:
                     pass
             break  # 只看第一条 system
     return "mid"
+
+
+def _extract_scene(reply: str) -> tuple[str, str | None]:
+    """从 reply 末尾抠 [SCENE:xxx] 标签（任务 7）。"""
+    if not reply:
+        return reply, None
+    m = SCENE_PATTERN.search(reply)
+    if m:
+        scene = m.group(1).lower()
+        if scene in VALID_SCENES:
+            return SCENE_PATTERN.sub("", reply).strip(), scene
+    matches = list(re.finditer(r"\[SCENE\s*:\s*(\w+)\s*\]", reply, re.IGNORECASE))
+    if matches:
+        last = matches[-1]
+        scene = last.group(1).lower()
+        if scene in VALID_SCENES:
+            cleaned = re.sub(r"\[SCENE\s*:\s*\w+\s*\]", "", reply).strip()
+            return cleaned, scene
+    return reply.strip(), None
 
 
 def _extract_stage(reply: str) -> tuple[str, str | None]:
@@ -321,11 +349,12 @@ def _sanitize_for_scoring(content: str) -> str:
 
 # ── 业务接口 ────────────────────────────────────────────────────────────
 
-def chat(messages) -> dict:
+def chat(messages, scenario: str | None = None) -> dict:
     """
     ASD 约束对话。
     输入校验失败时返回友好兜底，不抛异常。
     任务 3：从首条 system message 抽取年龄并注入 {age_band} 占位符。
+    任务 7：可选 scenario 参数切换到场景 prompt，并返回 scene 子阶段。
     中危 #11：最新一条 user 消息若被注入检测拦截，直接返回温和拒绝，不调 LLM。
     """
     cleaned = _validate_messages(messages)
@@ -338,6 +367,7 @@ def chat(messages) -> dict:
         return {
             "reply": "我们就聊聊你今天的事吧。",
             "stage": None,
+            "scene": None,
             "age_band": None,
         }
     # 过滤掉被标记的注入条目，再继续
@@ -349,13 +379,25 @@ def chat(messages) -> dict:
     age_band = _extract_age_band(cleaned)
 
     cleaned = _truncate_history(cleaned)
-    system_prompt = _load_prompt("prompt_chat.txt")
+
+    # 任务 7：场景模式 vs 默认聊天 prompt 切换
+    prompt_filename = "prompt_chat.txt"
+    if scenario and scenario in SCENARIO_PROMPTS:
+        prompt_filename = SCENARIO_PROMPTS[scenario]
+
+    system_prompt = _load_prompt(prompt_filename)
     # 注入年龄分档说明；若模板里没有占位符则不变
     system_prompt = system_prompt.replace("{age_band}", AGE_BAND_PROMPTS.get(age_band, AGE_BAND_PROMPTS["mid"]))
 
     raw_reply = call_llm(system_prompt, cleaned)
-    reply, stage = _extract_stage(raw_reply)
-    return {"reply": reply, "stage": stage, "age_band": age_band}
+
+    # 场景模式抽 [SCENE:xxx]；默认聊天抽 [STAGE:xxx]
+    if scenario:
+        reply, scene = _extract_scene(raw_reply)
+        return {"reply": reply, "scene": scene, "stage": None, "age_band": age_band}
+    else:
+        reply, stage = _extract_stage(raw_reply)
+        return {"reply": reply, "stage": stage, "scene": None, "age_band": age_band}
 
 
 def score(messages, level=None) -> dict:

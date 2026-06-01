@@ -37,6 +37,10 @@ function App() {
   // 训练阶段：后端 /api/chat 返回的 stage，前端按轮数推断兜底
   const [currentStage, setCurrentStage] = useState('welcome')
 
+  // 任务 7：场景模式（null = 默认自由聊天；'supermarket' = 超市练习）
+  const [scenario, setScenario] = useState(null)
+  const [currentScene, setCurrentScene] = useState(null)
+
   // 声学历史：每次录音结束 push 一条 features
   const [acousticHistory, setAcousticHistory] = useState(() => {
     try {
@@ -79,6 +83,8 @@ function App() {
     setMessages([])
     setAcousticHistory([])
     setCurrentStage('welcome')
+    setScenario(null)
+    setCurrentScene(null)
   }
 
   const pushAcousticFeatures = (features) => {
@@ -158,6 +164,10 @@ function App() {
         pushAcousticFeatures,
         currentStage,
         setCurrentStage,
+        scenario,
+        setScenario,
+        currentScene,
+        setCurrentScene,
         isOnline,
       }}
     >

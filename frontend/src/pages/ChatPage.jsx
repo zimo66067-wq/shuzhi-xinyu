@@ -4,6 +4,7 @@ import { speak, cancel as cancelTTS } from '../lib/tts'
 import usePushToTalk from '../hooks/usePushToTalk'
 import { ChatContext } from '../App'
 import TrainingStepper, { stageFromRoundCount } from '../components/TrainingStepper'
+import ScenarioBanner from '../components/ScenarioBanner'
 
 // 任务 1：根据心屿回复内容推断情绪表情（驱动 VRM expression）
 // 极简关键词匹配；命中多个时按优先级 happy > sad > surprised > relaxed
@@ -92,6 +93,10 @@ function ChatPage({ navigate }) {
     pushAcousticFeatures,
     currentStage,
     setCurrentStage,
+    scenario,
+    setScenario,
+    currentScene,
+    setCurrentScene,
     isOnline,
   } = useContext(ChatContext)
 
@@ -237,20 +242,37 @@ function ChatPage({ navigate }) {
       : newMessages
 
     try {
-      const response = await fetch('http://localhost:5000/api/chat', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messagesToSend }),
+        body: JSON.stringify({
+          messages: messagesToSend,
+          // 任务 7：场景模式时把 scenario 标识发给后端
+          ...(scenario ? { scenario } : {}),
+        }),
       })
       if (!response.ok) throw new Error('Network error')
       const data = await response.json()
       const reply = data.reply || '心屿暂时说不出话来'
 
-      // 训练阶段：后端返回 stage 优先，否则按轮数推断
-      const nextStage =
-        data.stage ||
-        stageFromRoundCount(newMessages.filter((m) => m.role !== 'system').length + 1)
-      setCurrentStage(nextStage)
+      // 训练阶段（自由聊天模式）/ 子场景（场景模式）二选一
+      if (scenario) {
+        if (data.scene) {
+          setCurrentScene(data.scene)
+          // 场景到 'end' 时自动退出场景模式
+          if (data.scene === 'end') {
+            setTimeout(() => {
+              setScenario(null)
+              setCurrentScene(null)
+            }, 3500)
+          }
+        }
+      } else {
+        const nextStage =
+          data.stage ||
+          stageFromRoundCount(newMessages.filter((m) => m.role !== 'system').length + 1)
+        setCurrentStage(nextStage)
+      }
 
       // 情绪安全升级：检测连续安抚关键词命中
       const hit = COMFORT_KEYWORDS.some((kw) => reply.includes(kw))
@@ -359,8 +381,19 @@ function ChatPage({ navigate }) {
         </button>
       </div>
 
-      {/* 训练阶段进度条 */}
-      <TrainingStepper currentStage={currentStage} />
+      {/* 场景模式 → 场景横幅；自由聊天 → 5 阶段进度条 */}
+      {scenario ? (
+        <ScenarioBanner
+          scenario={scenario}
+          currentScene={currentScene}
+          onExit={() => {
+            setScenario(null)
+            setCurrentScene(null)
+          }}
+        />
+      ) : (
+        <TrainingStepper currentStage={currentStage} />
+      )}
 
       {/* 安抚提示条 */}
       {showComfort && (
