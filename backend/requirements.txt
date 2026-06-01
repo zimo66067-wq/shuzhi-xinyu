@@ -1,4 +1,26 @@
+# 数智心屿 后端依赖
+# 安装：pip install -r requirements.txt
+
+# Web 框架
 flask>=3.0
 flask-cors>=4.0
-requests>=2.31
+flask-limiter>=3.5
+
+# HTTP 客户端（修复 CVE-2024-35195）
+requests>=2.32
+
+# 环境变量
 python-dotenv>=1.0
+
+# 腾讯云 SDK（TTS + ASR）
+tencentcloud-sdk-python>=3.0.1000
+
+# 音频处理（STT 录音转码 webm → wav）
+pydub>=0.25
+imageio-ffmpeg>=0.4
+
+# Python 3.13+ 移除了内置 audioop，pydub 需要这个 backport
+audioop-lts>=0.2; python_version >= "3.13"
+
+# 生产 WSGI 服务器（部署时用 gunicorn，开发不必须）
+gunicorn>=21.2; sys_platform != "win32"

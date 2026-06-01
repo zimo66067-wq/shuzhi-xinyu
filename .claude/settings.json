@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; $input | Set-Content -Encoding utf8 $env:TEMP\\xinyu_hook_in.json; $j = Get-Content $env:TEMP\\xinyu_hook_in.json -Raw | ConvertFrom-Json; $cmd = $j.tool_input.command; if (-not $cmd) { exit 0 }; if ($cmd -match 'sk-[A-Za-z0-9]{20,}' -or $cmd -match 'AKID[A-Za-z0-9]{20,}') { Write-Error '[xinyu-guard] 命令中疑似包含 API 密钥（DeepSeek sk-... 或 腾讯 AKID...）。绝不要把密钥直接放进命令行/历史。请改用 .env 文件。'; exit 2 }; if ($cmd -match 'git\\s+push\\s+.*--force' -or $cmd -match 'git\\s+push\\s+.*-f($|\\s)') { Write-Error '[xinyu-guard] 检测到 git push --force。这会覆写远程历史，可能丢失协作者的提交。如果确定要做，请在对话中明确告诉用户后再用 --force-with-lease。'; exit 2 }; exit 0\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(npm run dev)",
+      "Bash(npm install)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(git pull)",
+      "Bash(git branch:*)",
+      "Bash(git remote:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git check-ignore:*)",
+      "PowerShell(Get-Process python*)",
+      "PowerShell(Get-Process node*)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-NetTCPConnection -LocalPort *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
+      "Bash(git push --force)",
+      "Bash(git push -f)",
+      "PowerShell(Remove-Item -Recurse -Force C:\\)",
+      "PowerShell(Remove-Item -Recurse -Force /*)"
+    ]
+  }
+}

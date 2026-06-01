@@ -2,10 +2,9 @@ import { useContext, useState } from 'react'
 import { ChatContext } from '../App'
 import PasswordGate from '../components/PasswordGate'
 import ScoreRadarChart from '../components/ScoreRadarChart'
+import { authHeader, getToken } from '../lib/parentAuth'
 
-const API_BASE = 'http://localhost:5000'
-// 家长密码：构建时从环境变量 VITE_PARENT_PASSWORD 注入，未设置回退 '1234'
-const PARENT_PASSWORD = import.meta.env.VITE_PARENT_PASSWORD || '1234'
+const API_BASE = ''  // 走 vite proxy / nginx 反代，相对路径
 
 function ParentPage({ navigate }) {
   const { childInfo, messages, acousticHistory = [] } = useContext(ChatContext)
@@ -27,15 +26,22 @@ function ParentPage({ navigate }) {
     setReportText('')
 
     try {
-      // 第一步：评分
+      // 第一步：评分（带家长 token）
       const scoreRes = await fetch(`${API_BASE}/api/score`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader(),
+        },
         body: JSON.stringify({
           messages,
           level: 'beginner',
         }),
       })
+      if (scoreRes.status === 401) {
+        setAuthenticated(false)
+        throw new Error('登录已过期，请重新输入密码')
+      }
       if (!scoreRes.ok) throw new Error('评分接口失败')
       const scoreData = await scoreRes.json()
       if (scoreData.error) throw new Error(scoreData.error)
@@ -44,12 +50,19 @@ function ParentPage({ navigate }) {
       // 第二步：报告（基于评分）
       const reportRes = await fetch(`${API_BASE}/api/report`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader(),
+        },
         body: JSON.stringify({
           score_data: scoreData,
           level: 'beginner',
         }),
       })
+      if (reportRes.status === 401) {
+        setAuthenticated(false)
+        throw new Error('登录已过期，请重新输入密码')
+      }
       if (!reportRes.ok) throw new Error('报告接口失败')
       const reportData = await reportRes.json()
       setReportText(reportData.report_text || '报告生成失败')
@@ -61,10 +74,14 @@ function ParentPage({ navigate }) {
     }
   }
 
+  // 进入时如果 sessionStorage 已有有效 token，直接放行
+  if (!authenticated && getToken()) {
+    setAuthenticated(true)
+  }
+
   if (!authenticated) {
     return (
       <PasswordGate
-        expectedPassword={PARENT_PASSWORD}
         onSuccess={() => setAuthenticated(true)}
         onCancel={() => navigate('startup')}
       />

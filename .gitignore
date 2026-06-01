@@ -68,10 +68,13 @@ backend/bin/
 Thumbs.db
 .vscode/
 .idea/
-.claude/
 *.swp
 *.swo
 *~
+
+# ---- Claude Code ----
+# settings.local.json 含个人 allowlist，不入库；其它 .claude/* 都是项目资产要入库
+.claude/settings.local.json
 
 # ---- 日志 ----
 *.log

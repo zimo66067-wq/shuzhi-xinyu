@@ -12,16 +12,78 @@ app.py — 数智心屿 AI Demo 的 Flask 入口
   环境变量 DEEPSEEK_API_KEY（必须）或 GEMINI_API_KEY（备选）
 """
 
+import hashlib
+import hmac
+import os
+import secrets
+import time
 from io import BytesIO
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, abort, jsonify, request, send_file
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 from ai_service import chat, score, report
 import tts_service
 import stt_service
 
 app = Flask(__name__)
-CORS(app)
+
+# ── 安全：请求体大小全局上限 1MB；STT 端点单独放宽 ──────────────────────
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB
+
+# ── 安全：CORS Origin 白名单 ───────────────────────────────────────────
+# 默认仅允许 localhost dev；生产部署通过 CORS_ORIGINS 环境变量配置
+# 格式：CORS_ORIGINS=https://your.domain.com,https://www.your.domain.com
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+CORS(app, resources={r"/api/*": {"origins": _origins}}, supports_credentials=False)
+
+# ── 安全：速率限制（防止 API 被刷 / DeepSeek 额度被烧） ────────────────
+# 单进程内存后端，仅适合 dev / 单实例小流量。多实例部署改 storage_uri=redis://...
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per hour"],
+    storage_uri="memory://",
+)
+
+# ── 安全：家长鉴权（服务端校验密码 → 短期 HMAC token） ─────────────────
+# PARENT_PASSWORD：家长密码明文（仅在服务器 .env，不发给前端）
+# PARENT_SECRET：签名 token 用的密钥；未配置时每次重启随机生成（旧 token 失效）
+PARENT_PASSWORD = os.environ.get("PARENT_PASSWORD", "1234")
+PARENT_SECRET = os.environ.get("PARENT_SECRET", secrets.token_hex(32))
+PARENT_TOKEN_TTL = 60 * 60  # 1 小时
+
+
+def _make_parent_token() -> str:
+    """生成 'expires.signature' 格式的 token。"""
+    expires = int(time.time()) + PARENT_TOKEN_TTL
+    body = str(expires)
+    sig = hmac.new(PARENT_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
+def _verify_parent_token(token: str) -> bool:
+    if not token or "." not in token:
+        return False
+    try:
+        body, sig = token.split(".", 1)
+        expected = hmac.new(PARENT_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        return int(body) > time.time()
+    except (ValueError, TypeError):
+        return False
+
+
+def _require_parent_auth():
+    """从 Authorization: Bearer xxx 抽 token 并校验；不通过直接 401。"""
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not _verify_parent_token(token):
+        abort(401, description="parent auth required")
 
 # ── 首页 ────────────────────────────────────────────────────────────────────
 
@@ -138,9 +200,29 @@ def home():
     return HOME_HTML
 
 
+# ── POST /api/parent/verify ───────────────────────────────────────────────
+
+@app.route("/api/parent/verify", methods=["POST"])
+@limiter.limit("5 per minute")  # 防暴力破解
+def api_parent_verify():
+    """
+    家长密码校验。
+    请求：{ "password": "xxxx" }
+    成功：{ "token": "xxx.yyy", "expires_in": 3600 }
+    失败：401 { "error": "invalid" }
+    """
+    data = request.get_json(silent=True) or {}
+    pwd = (data.get("password") or "").strip()
+    # 用 hmac.compare_digest 防时序攻击
+    if not pwd or not hmac.compare_digest(pwd, PARENT_PASSWORD):
+        return jsonify({"error": "invalid"}), 401
+    return jsonify({"token": _make_parent_token(), "expires_in": PARENT_TOKEN_TTL})
+
+
 # ── POST /api/chat ────────────────────────────────────────────────────────
 
 @app.route("/api/chat", methods=["POST"])
+@limiter.limit("60 per minute")
 def api_chat():
     """
     对话接口。
@@ -165,7 +247,9 @@ def api_chat():
 # ── POST /api/score ───────────────────────────────────────────────────────
 
 @app.route("/api/score", methods=["POST"])
+@limiter.limit("30 per minute")
 def api_score():
+    _require_parent_auth()  # 评分/报告属于家长后台数据，必须鉴权
     """
     评分接口。
 
@@ -199,7 +283,9 @@ def api_score():
 # ── POST /api/report ──────────────────────────────────────────────────────
 
 @app.route("/api/report", methods=["POST"])
+@limiter.limit("30 per minute")
 def api_report():
+    _require_parent_auth()
     """
     报告生成接口。
 
@@ -224,6 +310,7 @@ def api_report():
 # ── POST /api/tts ─────────────────────────────────────────────────────────
 
 @app.route("/api/tts", methods=["POST"])
+@limiter.limit("60 per minute")
 def api_tts():
     """
     Edge-TTS 语音合成接口。
@@ -242,11 +329,14 @@ def api_tts():
 
     if not text:
         return jsonify({"error": "text 为空"}), 400
+    # TTS 单次合成文本长度上限（防止滥用烧 quota）
+    if len(text) > 500:
+        return jsonify({"error": "text too long"}), 413
 
     try:
         audio_bytes = tts_service.synthesize(text, voice=voice)
         if not audio_bytes:
-            return jsonify({"error": "edge-tts 返回空音频"}), 500
+            return jsonify({"error": "tts empty"}), 500
         return send_file(
             BytesIO(audio_bytes),
             mimetype="audio/mpeg",
@@ -254,60 +344,100 @@ def api_tts():
             download_name="xinyu_tts.mp3",
         )
     except Exception as e:
+        # 内部记录详细堆栈，但对外不暴露
         import traceback
-        tb = traceback.format_exc()
-        print("[TTS ERROR]", tb, flush=True)
-        return jsonify({"error": str(e), "type": type(e).__name__}), 500
+        traceback.print_exc()
+        return jsonify({"error": "tts failed"}), 500
 
 
 # ── POST /api/stt ─────────────────────────────────────────────────────────
 
+STT_ALLOWED_MIME = {
+    "audio/webm", "audio/ogg", "audio/wav", "audio/wave",
+    "audio/x-wav", "audio/mpeg", "audio/mp4",
+}
+# 单次录音上限 8MB（一句话识别 ≤ 60 秒，正常都在 1MB 以内）
+STT_MAX_BYTES = 8 * 1024 * 1024
+
+
 @app.route("/api/stt", methods=["POST"])
+@limiter.limit("20 per minute")
 def api_stt():
     """
     STT 一句话识别接口。
 
-    请求：multipart/form-data，field "audio" = 浏览器录的 webm/opus 二进制
+    请求：multipart/form-data
+        - field "audio" = 浏览器录的 webm/opus 二进制
+        - 大小上限 8MB，类型必须是音频 MIME
     响应：{ "text": "<识别结果>" } 或 { "error": "..." }
     """
     if "audio" not in request.files:
         return jsonify({"error": "missing audio field"}), 400
 
     audio_file = request.files["audio"]
-    audio_bytes = audio_file.read()
+
+    # 防御 1：MIME 类型白名单
+    if audio_file.mimetype and audio_file.mimetype not in STT_ALLOWED_MIME:
+        return jsonify({"error": "unsupported audio type"}), 415
+
+    # 防御 2：先看 Content-Length（避免读取超大文件）
+    # 注意：Flask 已通过 MAX_CONTENT_LENGTH 拦截 1MB 以上整体请求，
+    # 但 STT 想放宽到 8MB，所以这里单独再检查。
+    audio_bytes = audio_file.read(STT_MAX_BYTES + 1)
+    if len(audio_bytes) > STT_MAX_BYTES:
+        return jsonify({"error": "audio too large"}), 413
     if not audio_bytes:
         return jsonify({"error": "empty audio"}), 400
 
     try:
         text = stt_service.recognize(audio_bytes)
         return jsonify({"text": text})
-    except Exception as e:
+    except Exception:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e), "type": type(e).__name__}), 500
+        return jsonify({"error": "stt failed"}), 500
+
+
+@app.errorhandler(413)
+def _too_large(e):
+    return jsonify({"error": "request too large"}), 413
+
+
+@app.errorhandler(401)
+def _unauthorized(e):
+    return jsonify({"error": "unauthorized"}), 401
+
+
+@app.errorhandler(429)
+def _rate_limited(e):
+    return jsonify({"error": "too many requests"}), 429
 
 
 # ── GET /api/health ───────────────────────────────────────────────────────
 
 @app.route("/api/health", methods=["GET"])
+@limiter.exempt
 def health():
-    """健康检查"""
-    from llm_client import get_last_source
-    return jsonify({"status": "ok", "service": "数智心屿 AI Demo", "last_llm": get_last_source()})
+    """健康检查（公开端点，不暴露内部状态）"""
+    return jsonify({"status": "ok"})
 
 
 # ── 启动 ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import os
-    has_key = bool(os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+    has_key = bool(os.environ.get("DEEPSEEK_API_KEY"))
     if not has_key:
-        print("⚠️  未检测到 DEEPSEEK_API_KEY 或 GEMINI_API_KEY 环境变量。")
-        print("   请先设置环境变量后再启动，否则所有 API 将返回兜底回复。")
-        print("   PowerShell: $env:DEEPSEEK_API_KEY=\"sk-xxx\"")
-        print("   CMD:        set DEEPSEEK_API_KEY=sk-xxx")
+        print("⚠️  未检测到 DEEPSEEK_API_KEY 环境变量。")
+        print("   请在 backend/.env 配置后再启动，否则对话 API 将不可用。")
         print()
-    print("🚀 数智心屿 AI Demo 启动中...")
-    print("   API 地址：http://localhost:5000")
-    print("   健康检查：http://localhost:5000/api/health")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+
+    # 默认仅本机访问；生产环境用 gunicorn/uwsgi 启动，由 nginx 反代
+    # 显式设 FLASK_HOST=0.0.0.0 时才会监听所有网卡（仅供 docker / 局域网调试）
+    host = os.environ.get("FLASK_HOST", "127.0.0.1")
+    port = int(os.environ.get("FLASK_PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+
+    print(f"🚀 数智心屿 AI 后端启动：http://{host}:{port}  (debug={debug})")
+    if debug:
+        print("⚠️  DEBUG 模式开启，仅限本地开发，绝不可暴露到公网！")
+    app.run(host=host, port=port, debug=debug)
