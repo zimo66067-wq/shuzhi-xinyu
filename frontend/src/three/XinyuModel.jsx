@@ -58,7 +58,7 @@ function XinyuModel({
     highBand: state === 'speaking' ? highBand : 0,
   })
 
-  // 初次拿到 VRM：优化几何 + 注册 lip sync
+  // 初次拿到 VRM：优化几何 + 双臂下垂 + 注册 lip sync
   // 朝向通过下面 JSX 的 group rotation 控制，不在这里改 vrm.scene
   useEffect(() => {
     if (!vrm) return
@@ -69,6 +69,29 @@ function XinyuModel({
       VRMUtils.removeUnnecessaryJoints(vrm.scene)
     } catch (e) {
       console.warn('[XinyuModel] VRMUtils optimize 失败（可忽略）', e?.message)
+    }
+
+    // 任务 1：把 VRM 默认 T-pose 改成自然站姿（双臂自下垂）
+    // VRM humanoid 标准骨骼：upperArm 沿 Z 轴旋转可让胳膊从水平 → 下垂
+    // 左臂顺时针 / 右臂逆时针约 75°
+    try {
+      const humanoid = vrm.humanoid
+      if (humanoid?.getNormalizedBoneNode) {
+        const leftUpper = humanoid.getNormalizedBoneNode('leftUpperArm')
+        const rightUpper = humanoid.getNormalizedBoneNode('rightUpperArm')
+        const leftLower = humanoid.getNormalizedBoneNode('leftLowerArm')
+        const rightLower = humanoid.getNormalizedBoneNode('rightLowerArm')
+
+        // 大臂下垂（核心）：左 -75°、右 +75°
+        if (leftUpper) leftUpper.rotation.z = -1.31  // -75°
+        if (rightUpper) rightUpper.rotation.z = 1.31  // +75°
+
+        // 小臂略微内收（避免胳膊和身体穿模）
+        if (leftLower) leftLower.rotation.z = -0.1
+        if (rightLower) rightLower.rotation.z = 0.1
+      }
+    } catch (e) {
+      console.warn('[XinyuModel] 调整手臂姿态失败:', e?.message)
     }
 
     setLipSyncVrm(vrm)

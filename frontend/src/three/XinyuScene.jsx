@@ -67,10 +67,16 @@ function XinyuScene({
       style={{ width: '100%', height: '100%', borderRadius: '50%' }}
     >
       <CameraRig />
-      {/* 三点布光：略温暖前光 + 头顶柔光 + 反差补光 */}
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[1.5, 2.5, 2]} intensity={1.05} color="#FFF0E0" />
-      <directionalLight position={[-2, 1.2, 1]} intensity={0.35} color="#E6F2FF" />
+      {/* 加强面部布光：环境光提亮 + 正前方主光 + 侧补光 + 头顶辅助 */}
+      <ambientLight intensity={0.85} />
+      {/* 主光：相机正前方略偏右上，温暖色温，专打脸部 */}
+      <directionalLight position={[0.5, 1.8, 2.5]} intensity={1.4} color="#FFF6E8" />
+      {/* 侧补光：左侧柔和冷色，让脸部立体 */}
+      <directionalLight position={[-1.8, 1.4, 1.5]} intensity={0.6} color="#E6F2FF" />
+      {/* 顶光：头发轮廓 */}
+      <directionalLight position={[0, 3, 0.5]} intensity={0.4} color="#FFFFFF" />
+      {/* 正面贴脸补光：消除"额头下半张脸偏暗"的卡通脸通病 */}
+      <pointLight position={[0, 1.45, 1.0]} intensity={0.4} color="#FFFAF0" distance={3} />
 
       <ModelErrorBoundary fallback={<XinyuFallback />}>
         <Suspense fallback={<XinyuFallback />}>
