@@ -34,18 +34,17 @@ class ModelErrorBoundary extends Component {
 }
 
 /**
- * 相机控制器：确保相机在 VRM 头部高度的前方，并明确看向头部。
- * Three.js Canvas 给的相机虽然能设 position，但不会自动 lookAt 模型；
- * 必须用 useEffect 显式调一次 lookAt。
+ * 相机控制器：把相机摆在 VRM 头部前方 1.3 米，看向略低于头顶的位置，
+ * 框住"头 + 肩 + 一点点胸"的肖像感。
  *
- * VRoid VRM 通常 feet=0、head≈1.4-1.5。
- * 相机距离 0.65 单位（拍胸口以上的肖像感）。
+ * VRoid VRM 默认 feet=0、head≈1.4-1.5；相机 Y=1.35 接近眼睛高度，
+ * 距离 1.3 配合 FOV 28°，画面里头+肩比例舒服。
  */
 function CameraRig() {
   const { camera } = useThree()
   useEffect(() => {
-    camera.position.set(0, 1.4, 0.65)
-    camera.lookAt(0, 1.38, 0)
+    camera.position.set(0, 1.35, 1.3)
+    camera.lookAt(0, 1.32, 0)
     camera.updateProjectionMatrix()
   }, [camera])
   return null
@@ -61,7 +60,7 @@ function XinyuScene({
 }) {
   return (
     <Canvas
-      camera={{ position: [0, 1.4, 0.65], fov: 32, near: 0.05, far: 100 }}
+      camera={{ position: [0, 1.35, 1.3], fov: 28, near: 0.05, far: 100 }}
       gl={{ antialias: true, alpha: true }}
       dpr={[1, 2]}
       frameloop="always"

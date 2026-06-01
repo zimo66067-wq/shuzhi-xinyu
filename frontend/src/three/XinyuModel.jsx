@@ -58,18 +58,16 @@ function XinyuModel({
     highBand: state === 'speaking' ? highBand : 0,
   })
 
-  // 初次拿到 VRM：优化几何 + 注册 lip sync
-  // 注意：VRM 1.0 默认朝向 -Z（标准的"面对镜头"方向）；
-  //       我们的相机在 +Z 方向看回 -Z，所以不要旋转模型。
+  // 初次拿到 VRM：优化几何 + 旋转 180° 面向相机 + 注册 lip sync
+  // VRoid Studio 2.13 导出的 VRM 1.0 实测仍朝 +Z（背对相机），需手动转回 -Z。
   useEffect(() => {
     if (!vrm) return
     vrmRef.current = vrm
 
-    // VRM 1.0 规范默认 +Y up, -Z forward。
-    // 但 VRoid 导出的 VRM 在 Three.js 里有时会反向（看到背影），
-    // 用 humanoid 提供的官方接口确保朝向镜头方向：
+    // 关键：让模型面向相机
+    vrm.scene.rotation.y = Math.PI
+
     try {
-      // VRMUtils 的 rotateVRM0 只对 0.x 有用；1.0 不需要
       VRMUtils.removeUnnecessaryVertices(vrm.scene)
       VRMUtils.removeUnnecessaryJoints(vrm.scene)
     } catch (e) {
