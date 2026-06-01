@@ -4,6 +4,8 @@ import PasswordGate from '../components/PasswordGate'
 import ScoreRadarChart from '../components/ScoreRadarChart'
 
 const API_BASE = 'http://localhost:5000'
+// 家长密码：构建时从环境变量 VITE_PARENT_PASSWORD 注入，未设置回退 '1234'
+const PARENT_PASSWORD = import.meta.env.VITE_PARENT_PASSWORD || '1234'
 
 function ParentPage({ navigate }) {
   const { childInfo, messages, acousticHistory = [] } = useContext(ChatContext)
@@ -62,7 +64,7 @@ function ParentPage({ navigate }) {
   if (!authenticated) {
     return (
       <PasswordGate
-        expectedPassword="1234"
+        expectedPassword={PARENT_PASSWORD}
         onSuccess={() => setAuthenticated(true)}
         onCancel={() => navigate('startup')}
       />

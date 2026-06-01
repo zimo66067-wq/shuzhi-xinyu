@@ -7,9 +7,14 @@
 .env
 .env.local
 .env.*.local
-*.env
 backend/.env
-backend/.env.*
+backend/.env.local
+frontend/.env
+frontend/.env.local
+# 但 .env.example 必须保留，作为新部署者的填空模板
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 *secret*
 *credentials*
 

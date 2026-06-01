@@ -4,8 +4,9 @@ function PausePage({ navigate }) {
   const [showPwd, setShowPwd] = useState(false)
   const [pwdInput, setPwdInput] = useState('')
 
-  // 默认家长密码（后期接入家长后台时替换）
-  const PARENT_PASSWORD = '1234'
+  // 家长密码：优先取构建期环境变量 VITE_PARENT_PASSWORD
+  // 若未配置则回退到 '1234'（仅开发/演示用，生产环境必须设置）
+  const PARENT_PASSWORD = import.meta.env.VITE_PARENT_PASSWORD || '1234'
 
   const handleConfirm = () => {
     if (pwdInput === PARENT_PASSWORD) {
