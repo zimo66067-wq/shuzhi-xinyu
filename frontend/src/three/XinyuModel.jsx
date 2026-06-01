@@ -1,61 +1,103 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+/**
+ * XinyuModel — VRM 版心屿模型（任务 1）
+ *
+ * 替换前：useGLTF + .glb + 基于 morphTargetInfluences 操作
+ * 替换后：GLTFLoader + VRMLoaderPlugin + VRM 1.0 ExpressionManager
+ *
+ * 功能：
+ *  - 加载 VRM 1.0 模型（带 viseme aa/ih/ou/ee/oh + blink + emotion presets）
+ *  - 自适应 fit（Box3 居中 + 缩放）
+ *  - 自动眨眼（idle 状态下随机间隔）
+ *  - 空闲微动（轻微浮动）
+ *  - thinking 状态下轻微左右摇头
+ *  - 口型同步交给 useLipSync hook（接收 volume + 频段拆分）
+ *  - Spring Bones（头发/衣物）自动更新
+ *  - 情绪表情（happy / sad / surprised）由 expression 字符串触发
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import * as THREE from 'three'
-import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
+
 import useLipSync from '../hooks/useLipSync'
 
-const MODEL_URL = '/models/xinyu.glb'
+const MODEL_URL = '/models/xinyu.vrm'
 
-function XinyuModel({ state = 'idle', volume = 0 }) {
+// 让 drei 的 useGLTF 走 VRM 解析器
+useGLTF.preload(MODEL_URL, false, false, (loader) => {
+  loader.register((parser) => new VRMLoaderPlugin(parser))
+})
+
+function XinyuModel({
+  state = 'idle',
+  volume = 0,
+  lowBand = 0,
+  midBand = 0,
+  highBand = 0,
+  expression = 'neutral',
+}) {
   const groupRef = useRef()
-  const faceMeshRef = useRef(null)
+  const vrmRef = useRef(null)
   const [blinkClose, setBlinkClose] = useState(0)
+  const [emotionLevel, setEmotionLevel] = useState({})
 
-  const { gl } = useThree()
-  const ktx2Loader = useMemo(() => {
-    const loader = new KTX2Loader()
-    loader.setTranscoderPath('/basis/')
-    loader.detectSupport(gl)
-    return loader
-  }, [gl])
+  // 用 useGLTF 注入 VRMLoaderPlugin
+  const gltf = useGLTF(MODEL_URL, false, false, (loader) => {
+    loader.register((parser) => new VRMLoaderPlugin(parser))
+  })
+  const vrm = gltf.userData?.vrm
 
-  // 参数 2: Draco（设 false，国内访问 gstatic 慢；facecap.glb 也不用 Draco）
-  // 参数 3: MeshOpt（设 true，facecap.glb 用了 meshopt 几何压缩）
-  // 参数 4: extendLoader（注入 KTX2Loader 处理 basis 纹理压缩）
-  const { scene } = useGLTF(MODEL_URL, false, true, (loader) => {
-    loader.setKTX2Loader(ktx2Loader)
+  // 把 VRM 实例丢给口型同步 hook
+  const setLipSyncVrm = useLipSync({
+    volume: state === 'speaking' ? volume : 0,
+    lowBand: state === 'speaking' ? lowBand : 0,
+    midBand: state === 'speaking' ? midBand : 0,
+    highBand: state === 'speaking' ? highBand : 0,
   })
 
-  const setLipSyncMesh = useLipSync(state === 'speaking' ? volume : 0)
+  // 初次拿到 VRM：旋转面向相机 + 优化几何 + 注册 lip sync
+  useEffect(() => {
+    if (!vrm) return
+    vrmRef.current = vrm
 
-  // 自适应：根据模型 bounding box 自动居中和缩放，兼容头部/全身两种模型
+    // VRM 默认朝向 Z+，我们的相机在 Z+，需要把模型转过来面向相机
+    vrm.scene.rotation.y = Math.PI
+
+    // 优化：去掉用不到的 vertex 数据
+    try {
+      VRMUtils.removeUnnecessaryVertices(vrm.scene)
+      VRMUtils.removeUnnecessaryJoints(vrm.scene)
+    } catch (e) {
+      console.warn('[XinyuModel] VRMUtils optimize 失败（可忽略）', e?.message)
+    }
+
+    setLipSyncVrm(vrm)
+  }, [vrm, setLipSyncVrm])
+
+  // 自适应缩放（VRM 自带的标准化身高约 1.5m，需要 fit 到画布区域）
   const { fitScale, fitOffset } = useMemo(() => {
-    if (!scene) return { fitScale: 1, fitOffset: [0, 0, 0] }
-    const box = new THREE.Box3().setFromObject(scene)
+    if (!vrm) return { fitScale: 1, fitOffset: [0, 0, 0] }
+    const box = new THREE.Box3().setFromObject(vrm.scene)
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
+    // 目标：让头部填满画面上半区，相机看向头部
+    // VRM 是全身像，我们只想看上半身/头：scale 放大让头占满
     const maxDim = Math.max(size.x, size.y, size.z) || 1
-    const targetSize = 1.0   // 留余量，避免相机视野截断
-    const scale = targetSize / maxDim
-    console.log('[XinyuModel] 模型尺寸:', size, '中心:', center, '应用 scale=', scale)
+    const scale = 0.95 / maxDim
     return {
-      fitScale: scale,
-      fitOffset: [-center.x * scale, -center.y * scale, -center.z * scale],
+      fitScale: scale * 2.2, // 放大 2.2 倍，让头/胸口占据画面
+      fitOffset: [
+        -center.x * scale * 2.2,
+        -center.y * scale * 2.2 + 1.5, // 上移到头部位置
+        -center.z * scale * 2.2,
+      ],
     }
-  }, [scene])
+  }, [vrm])
 
-  useEffect(() => {
-    let faceMesh = null
-    scene.traverse((obj) => {
-      if (obj.morphTargetInfluences && obj.morphTargetDictionary && !faceMesh) {
-        faceMesh = obj
-      }
-    })
-    faceMeshRef.current = faceMesh
-    if (faceMesh) setLipSyncMesh(faceMesh)
-  }, [scene, setLipSyncMesh])
-
+  // 眨眼调度：每 2.5-5s 闭眼 130ms
   useEffect(() => {
     let openTimer
     let closeTimer
@@ -76,40 +118,61 @@ function XinyuModel({ state = 'idle', volume = 0 }) {
     }
   }, [])
 
-  useFrame(() => {
-    if (!groupRef.current) return
-    const t = performance.now() * 0.001
+  // 情绪表情：根据 expression prop 渐变到目标 expression
+  useEffect(() => {
+    // 把所有情绪重置为 0，目标的设为 0.7（不全开，保留克制感）
+    const next = { happy: 0, sad: 0, angry: 0, surprised: 0, relaxed: 0 }
+    if (expression && next.hasOwnProperty(expression)) {
+      next[expression] = 0.7
+    } else if (expression === 'neutral') {
+      next.relaxed = 0.15 // 中性也给一点点放松感
+    }
+    setEmotionLevel(next)
+  }, [expression])
 
-    groupRef.current.position.y = Math.sin(t * 0.8) * 0.03
+  useFrame((_, delta) => {
+    const vrm = vrmRef.current
+    if (!vrm) return
 
-    if (state === 'thinking') {
-      groupRef.current.rotation.z = Math.sin(t * 0.6) * 0.06
-    } else {
-      groupRef.current.rotation.z = 0
+    // 必须每帧调 update 让 spring bone 跟着头部动
+    vrm.update(delta)
+
+    // 浮动微动
+    if (groupRef.current) {
+      const t = performance.now() * 0.001
+      groupRef.current.position.y = fitOffset[1] + Math.sin(t * 0.8) * 0.02
+      groupRef.current.rotation.z =
+        state === 'thinking' ? Math.sin(t * 0.7) * 0.04 : 0
     }
 
-    const mesh = faceMeshRef.current
-    if (!mesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return
-    const dict = mesh.morphTargetDictionary
-    const inf = mesh.morphTargetInfluences
+    // 眨眼写回
+    const exp = vrm.expressionManager
+    if (!exp) return
+    try {
+      exp.setValue('blink', blinkClose)
+    } catch {}
 
-    const eyeBlinkL = dict.eyeBlinkLeft ?? dict.eyeBlink_L
-    const eyeBlinkR = dict.eyeBlinkRight ?? dict.eyeBlink_R
-    if (eyeBlinkL !== undefined) inf[eyeBlinkL] = blinkClose
-    if (eyeBlinkR !== undefined) inf[eyeBlinkR] = blinkClose
-
-    const mouthSmile = dict.mouthSmile ?? dict.mouthSmileLeft
-    if (mouthSmile !== undefined) {
-      const target = state === 'listening' ? 0.4 : 0.15
-      inf[mouthSmile] += (target - inf[mouthSmile]) * 0.05
+    // 情绪表情（渐变到目标值）
+    for (const key of Object.keys(emotionLevel)) {
+      try {
+        const target = emotionLevel[key]
+        const current = exp.getValue(key) ?? 0
+        const next = current + (target - current) * 0.06
+        exp.setValue(key, next)
+      } catch {}
     }
+
+    // 让 VRM 同时把 morph 写到底层 mesh
+    try {
+      exp.update()
+    } catch {}
   })
 
+  if (!vrm) return null
+
   return (
-    <group ref={groupRef}>
-      <group position={fitOffset} scale={fitScale}>
-        <primitive object={scene} />
-      </group>
+    <group ref={groupRef} position={fitOffset} scale={fitScale}>
+      <primitive object={vrm.scene} />
     </group>
   )
 }

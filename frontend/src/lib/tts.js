@@ -103,18 +103,30 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
       console.warn('[TTS] AnalyserNode 创建失败，仅播放无口型:', e)
     }
 
+    // 任务 1：除了时域 RMS（音量），再做一次频域分析拆 3 个频段
     let analyser = null
     let timeData = null
+    let freqData = null
+    let lowEnd = 0
+    let midEnd = 0
     if (source) {
       analyser = audioCtx.createAnalyser()
       analyser.fftSize = 512
-      analyser.smoothingTimeConstant = 0.6
+      analyser.smoothingTimeConstant = 0.5
       timeData = new Uint8Array(analyser.fftSize)
+      freqData = new Uint8Array(analyser.frequencyBinCount) // 256 bins
+      // 频段切分：采样率 / 2 / binCount 等于每 bin 的 Hz 宽度
+      const sampleRate = audioCtx.sampleRate || 44100
+      const nyquist = sampleRate / 2
+      const binWidth = nyquist / analyser.frequencyBinCount
+      lowEnd = Math.floor(500 / binWidth)
+      midEnd = Math.floor(2000 / binWidth)
       source.connect(analyser)
       source.connect(audioCtx.destination)
     }
 
     let finished = false
+    const SILENT = { volume: 0, lowBand: 0, midBand: 0, highBand: 0 }
     const finish = () => {
       if (finished) return
       finished = true
@@ -122,7 +134,7 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
         cancelAnimationFrame(currentRaf)
         currentRaf = null
       }
-      onVolume(0)
+      onVolume(SILENT)
       try {
         audioCtx.close()
       } catch (_) {}
@@ -138,6 +150,8 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
 
     const tick = () => {
       if (!analyser || !timeData || finished) return
+
+      // 时域：RMS → volume
       analyser.getByteTimeDomainData(timeData)
       let sumSq = 0
       for (let i = 0; i < timeData.length; i++) {
@@ -146,7 +160,26 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
       }
       const rms = Math.sqrt(sumSq / timeData.length)
       const volume = Math.min(1, rms * 3.2)
-      onVolume(volume)
+
+      // 频域：3 个频段能量占比（任务 1 口型同步用）
+      let lowBand = 0, midBand = 0, highBand = 0
+      if (freqData) {
+        analyser.getByteFrequencyData(freqData)
+        let lowSum = 0, midSum = 0, highSum = 0
+        for (let i = 0; i < freqData.length; i++) {
+          const v = freqData[i] / 255
+          if (i < lowEnd) lowSum += v
+          else if (i < midEnd) midSum += v
+          else highSum += v
+        }
+        const total = lowSum + midSum + highSum || 1
+        lowBand = lowSum / total
+        midBand = midSum / total
+        highBand = highSum / total
+      }
+
+      // 兼容旧签名：onVolume(volume)；新签名：onVolume({volume, lowBand, midBand, highBand})
+      onVolume({ volume, lowBand, midBand, highBand })
       currentRaf = requestAnimationFrame(tick)
     }
 
@@ -187,7 +220,13 @@ function speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd }) {
       utterance.lang = 'zh-CN'
     }
 
-    const envelope = createEnvelope({ text, rate, onVolume })
+    // Web Speech 没有真实音频，包络只能模拟 volume；频段全 0（口型退化为只动 aa）
+    const envelope = createEnvelope({
+      text,
+      rate,
+      onVolume: (v) =>
+        onVolume({ volume: v, lowBand: 0.6, midBand: 0.3, highBand: 0.1 }),
+    })
     currentEnvelope = envelope
 
     utterance.onstart = () => envelope.start()
@@ -197,7 +236,7 @@ function speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd }) {
 
     const finish = (errorEvent) => {
       envelope.stop()
-      onVolume(0)
+      onVolume({ volume: 0, lowBand: 0, midBand: 0, highBand: 0 })
       currentEnvelope = null
       if (errorEvent && errorEvent.error && errorEvent.error !== 'canceled' && errorEvent.error !== 'interrupted') {
         console.warn('[TTS] Web Speech 出错:', errorEvent.error)

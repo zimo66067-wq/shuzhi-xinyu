@@ -33,10 +33,17 @@ class ModelErrorBoundary extends Component {
   }
 }
 
-function XinyuScene({ state = 'idle', volume = 0 }) {
+function XinyuScene({
+  state = 'idle',
+  volume = 0,
+  lowBand = 0,
+  midBand = 0,
+  highBand = 0,
+  expression = 'neutral',
+}) {
   return (
     <Canvas
-      camera={{ position: [0, 0.1, 2.4], fov: 32 }}
+      camera={{ position: [0, 1.5, 0.9], fov: 28 }}
       gl={{ antialias: true, alpha: true }}
       dpr={[1, 2]}
       frameloop="always"
@@ -48,7 +55,14 @@ function XinyuScene({ state = 'idle', volume = 0 }) {
 
       <ModelErrorBoundary fallback={<XinyuFallback />}>
         <Suspense fallback={<XinyuFallback />}>
-          <XinyuModel state={state} volume={volume} />
+          <XinyuModel
+            state={state}
+            volume={volume}
+            lowBand={lowBand}
+            midBand={midBand}
+            highBand={highBand}
+            expression={expression}
+          />
         </Suspense>
       </ModelErrorBoundary>
     </Canvas>

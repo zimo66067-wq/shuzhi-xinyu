@@ -38,6 +38,8 @@ build/
 # ---- 大模型文件（队员从其他渠道分发，避免仓库膨胀） ----
 *.glb
 *.gltf
+*.vrm
+*.vroid
 *.fbx
 *.blend
 *.blend1

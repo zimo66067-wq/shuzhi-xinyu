@@ -5,6 +5,24 @@ import usePushToTalk from '../hooks/usePushToTalk'
 import { ChatContext } from '../App'
 import TrainingStepper, { stageFromRoundCount } from '../components/TrainingStepper'
 
+// 任务 1：根据心屿回复内容推断情绪表情（驱动 VRM expression）
+// 极简关键词匹配；命中多个时按优先级 happy > sad > surprised > relaxed
+const EMOTION_KEYWORDS = {
+  happy: ['开心', '高兴', '太棒', '真好', '喜欢', '哈哈', '好玩', '有趣'],
+  sad: ['难过', '伤心', '哭', '不开心', '失望', '心疼'],
+  surprised: ['哇', '哦', '真的吗', '不可思议', '惊讶'],
+  relaxed: ['没关系', '慢慢来', '不着急', '休息一下', '深呼吸'],
+}
+function detectEmotionFromReply(text) {
+  if (!text) return 'neutral'
+  for (const [emo, kws] of Object.entries(EMOTION_KEYWORDS)) {
+    for (const k of kws) {
+      if (text.includes(k)) return emo
+    }
+  }
+  return 'neutral'
+}
+
 // 情绪安全升级：心屿回复中出现这些词代表正在安抚孩子
 const COMFORT_KEYWORDS = [
   '没关系',
@@ -79,7 +97,11 @@ function ChatPage({ navigate }) {
 
   const [inputText, setInputText] = useState('')
   const [xinyuState, setXinyuState] = useState('idle')
-  const [volume, setVolume] = useState(0)
+  // 任务 1：声学状态扩展为 4 路（volume + 3 频段），驱动 VRM 5 个 viseme
+  const [audioState, setAudioState] = useState({
+    volume: 0, lowBand: 0, midBand: 0, highBand: 0,
+  })
+  const [xinyuExpression, setXinyuExpression] = useState('neutral')
   const [thinkingDots, setThinkingDots] = useState('')
 
   // 任务 3：年龄分档（low/mid/high）
@@ -195,7 +217,7 @@ function ChatPage({ navigate }) {
 
     cancelTTS()
     setTtsSubtitle('')
-    setVolume(0)
+    setAudioState({ volume: 0, lowBand: 0, midBand: 0, highBand: 0 })
     setXinyuState('thinking')
     setInputText('')
 
@@ -242,22 +264,34 @@ function ChatPage({ navigate }) {
         setComfortHits(0)
       }
 
+      // 任务 1：情绪表情联动 —— 根据回复关键词触发 VRM expression
+      setXinyuExpression(detectEmotionFromReply(reply))
+
       setMessages([...newMessages, { role: 'assistant', content: reply }])
       setTtsSubtitle(reply)
       setXinyuState('speaking')
       await speak(reply, {
-        onVolume: setVolume,
+        // 任务 1：onVolume 现在收到 {volume, lowBand, midBand, highBand}
+        onVolume: (s) => {
+          if (typeof s === 'number') {
+            setAudioState({ volume: s, lowBand: 0.6, midBand: 0.3, highBand: 0.1 })
+          } else {
+            setAudioState(s)
+          }
+        },
         onEnd: () => {
-          setVolume(0)
+          setAudioState({ volume: 0, lowBand: 0, midBand: 0, highBand: 0 })
           setXinyuState('idle')
           setTtsSubtitle('')
+          // 说完话淡回 neutral
+          setTimeout(() => setXinyuExpression('neutral'), 600)
         },
       })
     } catch (err) {
       console.debug('[ChatPage] 调用后端失败:', err)
       setMessages([...newMessages, { role: 'assistant', content: '心屿暂时说不出话' }])
       setTtsSubtitle('心屿暂时说不出话')
-      setVolume(0)
+      setAudioState({ volume: 0, lowBand: 0, midBand: 0, highBand: 0 })
       setXinyuState('idle')
     }
   }
@@ -360,7 +394,14 @@ function ChatPage({ navigate }) {
       {/* 中央 3D 区域（扩展占满中部，原 chat-history 改为侧边栏） */}
       <div className="avatar-zone" style={{ flex: 1, height: 'auto' }}>
         <div className={`avatar-halo ${isThinking ? 'thinking' : ''}`}>
-          <XinyuScene state={xinyuState} volume={volume} />
+          <XinyuScene
+            state={xinyuState}
+            volume={audioState.volume}
+            lowBand={audioState.lowBand}
+            midBand={audioState.midBand}
+            highBand={audioState.highBand}
+            expression={xinyuExpression}
+          />
         </div>
         <div
           className="subtitle-overlay"
