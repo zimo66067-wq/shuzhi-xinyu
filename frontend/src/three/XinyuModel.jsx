@@ -58,16 +58,18 @@ function XinyuModel({
     highBand: state === 'speaking' ? highBand : 0,
   })
 
-  // 初次拿到 VRM：旋转面向相机 + 优化几何 + 注册 lip sync
+  // 初次拿到 VRM：优化几何 + 注册 lip sync
+  // 注意：VRM 1.0 默认朝向 -Z（标准的"面对镜头"方向）；
+  //       我们的相机在 +Z 方向看回 -Z，所以不要旋转模型。
   useEffect(() => {
     if (!vrm) return
     vrmRef.current = vrm
 
-    // VRM 默认朝向 Z+，我们的相机在 Z+，需要把模型转过来面向相机
-    vrm.scene.rotation.y = Math.PI
-
-    // 优化：去掉用不到的 vertex 数据
+    // VRM 1.0 规范默认 +Y up, -Z forward。
+    // 但 VRoid 导出的 VRM 在 Three.js 里有时会反向（看到背影），
+    // 用 humanoid 提供的官方接口确保朝向镜头方向：
     try {
+      // VRMUtils 的 rotateVRM0 只对 0.x 有用；1.0 不需要
       VRMUtils.removeUnnecessaryVertices(vrm.scene)
       VRMUtils.removeUnnecessaryJoints(vrm.scene)
     } catch (e) {
@@ -77,24 +79,17 @@ function XinyuModel({
     setLipSyncVrm(vrm)
   }, [vrm, setLipSyncVrm])
 
-  // 自适应缩放（VRM 自带的标准化身高约 1.5m，需要 fit 到画布区域）
-  const { fitScale, fitOffset } = useMemo(() => {
-    if (!vrm) return { fitScale: 1, fitOffset: [0, 0, 0] }
-    const box = new THREE.Box3().setFromObject(vrm.scene)
-    const size = box.getSize(new THREE.Vector3())
-    const center = box.getCenter(new THREE.Vector3())
-    // 目标：让头部填满画面上半区，相机看向头部
-    // VRM 是全身像，我们只想看上半身/头：scale 放大让头占满
-    const maxDim = Math.max(size.x, size.y, size.z) || 1
-    const scale = 0.95 / maxDim
-    return {
-      fitScale: scale * 2.2, // 放大 2.2 倍，让头/胸口占据画面
-      fitOffset: [
-        -center.x * scale * 2.2,
-        -center.y * scale * 2.2 + 1.5, // 上移到头部位置
-        -center.z * scale * 2.2,
-      ],
+  // 通过 humanoid 头骨节点拿到头部 Y 坐标，让相机能精准对准
+  // 默认 VRoid 角色：feet=0, head≈1.4-1.5
+  const headY = useMemo(() => {
+    if (!vrm?.humanoid) return 1.4
+    const headBone = vrm.humanoid.getNormalizedBoneNode?.('head')
+    if (headBone) {
+      const pos = new THREE.Vector3()
+      headBone.getWorldPosition(pos)
+      return pos.y || 1.4
     }
+    return 1.4
   }, [vrm])
 
   // 眨眼调度：每 2.5-5s 闭眼 130ms
@@ -137,10 +132,10 @@ function XinyuModel({
     // 必须每帧调 update 让 spring bone 跟着头部动
     vrm.update(delta)
 
-    // 浮动微动
+    // 浮动微动（保持在原位 + 微微上下浮 0.02 米）
     if (groupRef.current) {
       const t = performance.now() * 0.001
-      groupRef.current.position.y = fitOffset[1] + Math.sin(t * 0.8) * 0.02
+      groupRef.current.position.y = Math.sin(t * 0.8) * 0.02
       groupRef.current.rotation.z =
         state === 'thinking' ? Math.sin(t * 0.7) * 0.04 : 0
     }
@@ -171,7 +166,7 @@ function XinyuModel({
   if (!vrm) return null
 
   return (
-    <group ref={groupRef} position={fitOffset} scale={fitScale}>
+    <group ref={groupRef}>
       <primitive object={vrm.scene} />
     </group>
   )
