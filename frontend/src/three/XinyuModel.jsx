@@ -58,14 +58,11 @@ function XinyuModel({
     highBand: state === 'speaking' ? highBand : 0,
   })
 
-  // 初次拿到 VRM：优化几何 + 旋转 180° 面向相机 + 注册 lip sync
-  // VRoid Studio 2.13 导出的 VRM 1.0 实测仍朝 +Z（背对相机），需手动转回 -Z。
+  // 初次拿到 VRM：优化几何 + 注册 lip sync
+  // 朝向通过下面 JSX 的 group rotation 控制，不在这里改 vrm.scene
   useEffect(() => {
     if (!vrm) return
     vrmRef.current = vrm
-
-    // 关键：让模型面向相机
-    vrm.scene.rotation.y = Math.PI
 
     try {
       VRMUtils.removeUnnecessaryVertices(vrm.scene)
@@ -163,9 +160,13 @@ function XinyuModel({
 
   if (!vrm) return null
 
+  // 外层 group：浮动微动（由 useFrame 控制 position/rotation.z）
+  // 内层 group：朝向修正（VRoid Studio VRM 1.0 实测朝 +Z，旋转 180° 转向相机）
   return (
     <group ref={groupRef}>
-      <primitive object={vrm.scene} />
+      <group rotation={[0, Math.PI, 0]}>
+        <primitive object={vrm.scene} />
+      </group>
     </group>
   )
 }
