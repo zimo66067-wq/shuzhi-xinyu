@@ -153,13 +153,20 @@ function XinyuModel({
     const vrm = vrmRef.current
     if (!vrm) return
 
+    // 防御性：每帧把 vrm.scene 内部的 Y 旋转强制清零；
+    // 朝向只允许通过外层 JSX group 的 rotation 控制，避免缓存/HMR 污染。
+    vrm.scene.rotation.y = 0
+    vrm.scene.rotation.x = 0
+
     // 必须每帧调 update 让 spring bone 跟着头部动
     vrm.update(delta)
 
-    // 浮动微动（保持在原位 + 微微上下浮 0.02 米）
+    // 浮动微动：外层 group 的 Y 旋转必须保持 Math.PI（朝向相机），
+    // useFrame 里只能改 rotation.z（摇头）和 position.y（浮动）。
     if (groupRef.current) {
       const t = performance.now() * 0.001
       groupRef.current.position.y = Math.sin(t * 0.8) * 0.02
+      groupRef.current.rotation.y = Math.PI // 防御：强制保持
       groupRef.current.rotation.z =
         state === 'thinking' ? Math.sin(t * 0.7) * 0.04 : 0
     }
@@ -189,13 +196,12 @@ function XinyuModel({
 
   if (!vrm) return null
 
-  // 外层 group：浮动微动（由 useFrame 控制 position/rotation.z）
-  // 内层 group：朝向修正（VRoid Studio VRM 1.0 实测朝 +Z，旋转 180° 转向相机）
+  // 单层 group：Math.PI 旋转放在 JSX 上，useFrame 每帧强制保持
+  // 用 rotation-y={Math.PI} 而不是 rotation={[0,Math.PI,0]}，避免与 useFrame
+  // 里设 rotation.z 时整体被覆盖（虽然 Euler 分量独立，但保险写法）
   return (
-    <group ref={groupRef}>
-      <group rotation={[0, Math.PI, 0]}>
-        <primitive object={vrm.scene} />
-      </group>
+    <group ref={groupRef} rotation-y={Math.PI}>
+      <primitive object={vrm.scene} />
     </group>
   )
 }
