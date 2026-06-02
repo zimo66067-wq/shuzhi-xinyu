@@ -1,0 +1,40 @@
+[Unit]
+Description=Xinyu Backend (Flask + Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/shuzhi-xinyu/backend
+
+# 环境变量从 backend/.env 加载（由 wsgi.py 里的 dotenv 完成）
+# Gunicorn 自身的少量配置环境变量在这里设
+Environment="PYTHONIOENCODING=utf-8"
+Environment="GUNICORN_LOG_LEVEL=info"
+
+# 主进程命令
+ExecStart=/opt/shuzhi-xinyu/backend/venv/bin/gunicorn \
+    -c /opt/shuzhi-xinyu/deploy/gunicorn.conf.py \
+    wsgi:app
+
+# 崩溃后 5 秒自动重启
+Restart=always
+RestartSec=5
+
+# 优雅退出（让正在处理的请求完成）
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# 安全加固：限制可访问的目录
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+# 标准输出/错误进 journal，可用 journalctl -u xinyu-backend -f 查
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

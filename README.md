@@ -85,7 +85,13 @@
 
 ---
 
-## 快速开始
+## 部署到生产服务器
+
+生产部署见 [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) — 阿里云 Ubuntu 22.04 服务器，3 条命令完成部署，含 Nginx 反代、systemd 服务、HTTPS 配置。
+
+---
+
+## 快速开始（本地开发）
 
 ### 0. 环境要求
 

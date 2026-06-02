@@ -84,3 +84,9 @@ logs/
 npm-debug.log*
 
 # ---- 子目录 .gitignore 仍保留（backend/.gitignore、frontend/.gitignore） ----
+
+# IDE/编辑器自动生成的占位文件
+Untitled-*.py
+Untitled-*.txt
+Untitled-*.html
+
