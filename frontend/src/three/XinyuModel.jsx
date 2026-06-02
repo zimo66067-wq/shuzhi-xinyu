@@ -64,6 +64,12 @@ function XinyuModel({
     if (!vrm) return
     vrmRef.current = vrm
 
+    // 修复：useGLTF 缓存的 vrm.scene 可能被早期代码改过旋转。
+    // 每次进入这个组件强制清零本体变换，朝向只交给下面的 JSX wrapper 控制。
+    vrm.scene.rotation.set(0, 0, 0)
+    vrm.scene.position.set(0, 0, 0)
+    vrm.scene.scale.set(1, 1, 1)
+
     try {
       VRMUtils.removeUnnecessaryVertices(vrm.scene)
       VRMUtils.removeUnnecessaryJoints(vrm.scene)
