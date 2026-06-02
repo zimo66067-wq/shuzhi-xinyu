@@ -26,6 +26,12 @@ import useLipSync from '../hooks/useLipSync'
 
 const MODEL_URL = '/models/xinyu.vrm'
 
+// VRM 模型的初始 Y 轴旋转。
+//   0       → VRM 文件已朝向 +Z（相机方向），保持不动
+//   Math.PI → VRM 文件朝向 -Z（背对相机），旋转 180° 转过来
+// VRoid Studio 2.13 实测：默认朝向 +Z，无需旋转。
+const MODEL_FACING_Y = 0
+
 // 让 drei 的 useGLTF 走 VRM 解析器
 useGLTF.preload(MODEL_URL, false, false, (loader) => {
   loader.register((parser) => new VRMLoaderPlugin(parser))
@@ -161,12 +167,11 @@ function XinyuModel({
     // 必须每帧调 update 让 spring bone 跟着头部动
     vrm.update(delta)
 
-    // 浮动微动：外层 group 的 Y 旋转必须保持 Math.PI（朝向相机），
-    // useFrame 里只能改 rotation.z（摇头）和 position.y（浮动）。
+    // 浮动微动 + 朝向修正（朝向由 JSX rotation-y 设置，useFrame 强制保持）
     if (groupRef.current) {
       const t = performance.now() * 0.001
       groupRef.current.position.y = Math.sin(t * 0.8) * 0.02
-      groupRef.current.rotation.y = Math.PI // 防御：强制保持
+      groupRef.current.rotation.y = MODEL_FACING_Y // 见文件顶部常量
       groupRef.current.rotation.z =
         state === 'thinking' ? Math.sin(t * 0.7) * 0.04 : 0
     }
@@ -196,11 +201,9 @@ function XinyuModel({
 
   if (!vrm) return null
 
-  // 单层 group：Math.PI 旋转放在 JSX 上，useFrame 每帧强制保持
-  // 用 rotation-y={Math.PI} 而不是 rotation={[0,Math.PI,0]}，避免与 useFrame
-  // 里设 rotation.z 时整体被覆盖（虽然 Euler 分量独立，但保险写法）
+  // 朝向由顶部常量 MODEL_FACING_Y 控制，方便一行切换
   return (
-    <group ref={groupRef} rotation-y={Math.PI}>
+    <group ref={groupRef} rotation-y={MODEL_FACING_Y}>
       <primitive object={vrm.scene} />
     </group>
   )
