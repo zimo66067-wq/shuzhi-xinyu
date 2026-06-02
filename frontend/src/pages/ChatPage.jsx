@@ -323,6 +323,31 @@ function ChatPage({ navigate }) {
     sendMessage(inputText)
   }
 
+  // 口型测试：绕开 DeepSeek，直接让心屿朗读一段固定文本，方便验证口型同步
+  const testLipSync = async () => {
+    cancelTTS()
+    const sample =
+      '你好呀，今天天气真好。我们一起聊聊好玩的事情，比如你最近看过什么有趣的故事。'
+    setTtsSubtitle(sample)
+    setXinyuState('speaking')
+    setXinyuExpression('happy')
+    await speak(sample, {
+      onVolume: (s) => {
+        if (typeof s === 'number') {
+          setAudioState({ volume: s, lowBand: 0.6, midBand: 0.3, highBand: 0.1 })
+        } else {
+          setAudioState(s)
+        }
+      },
+      onEnd: () => {
+        setAudioState({ volume: 0, lowBand: 0, midBand: 0, highBand: 0 })
+        setXinyuState('idle')
+        setTtsSubtitle('')
+        setTimeout(() => setXinyuExpression('neutral'), 600)
+      },
+    })
+  }
+
   // 历史记录里过滤掉 system 消息（system 是发给后端用的，不展示给孩子）
   const visibleMessages = messages.filter((m) => m.role !== 'system')
 
@@ -372,13 +397,26 @@ function ChatPage({ navigate }) {
           </button>
         </div>
         <div className="top-title">心屿</div>
-        <button
-          className="btn-icon btn-pause top-pause"
-          onClick={() => navigate('pause')}
-          aria-label="暂停"
-        >
-          ⏸ 暂停
-        </button>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          {/* 口型测试按钮：朗读一段固定文本，不依赖 DeepSeek */}
+          <button
+            className="btn-icon"
+            onClick={testLipSync}
+            disabled={xinyuState === 'speaking' || xinyuState === 'thinking'}
+            title="测试口型同步（不依赖 DeepSeek）"
+            aria-label="测试口型"
+            style={{ fontSize: '14px', minWidth: 'auto', padding: '6px 10px' }}
+          >
+            🎙
+          </button>
+          <button
+            className="btn-icon btn-pause top-pause"
+            onClick={() => navigate('pause')}
+            aria-label="暂停"
+          >
+            ⏸ 暂停
+          </button>
+        </div>
       </div>
 
       {/* 场景模式 → 场景横幅；自由聊天 → 5 阶段进度条 */}
@@ -436,6 +474,31 @@ function ChatPage({ navigate }) {
             expression={xinyuExpression}
           />
         </div>
+
+        {/* dev 模式：右上角浮动条显示实时口型输入（生产构建会被 esbuild drop console 顺带剔除） */}
+        {import.meta.env.DEV && xinyuState === 'speaking' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '12px',
+              background: 'rgba(0,0,0,0.55)',
+              color: '#fff',
+              fontSize: '10px',
+              fontFamily: 'monospace',
+              padding: '6px 8px',
+              borderRadius: '6px',
+              lineHeight: 1.4,
+              pointerEvents: 'none',
+            }}
+          >
+            <div>vol&nbsp;{audioState.volume.toFixed(2)}</div>
+            <div>lo&nbsp;&nbsp;{audioState.lowBand.toFixed(2)}</div>
+            <div>mid&nbsp;{audioState.midBand.toFixed(2)}</div>
+            <div>hi&nbsp;&nbsp;{audioState.highBand.toFixed(2)}</div>
+          </div>
+        )}
+
         <div
           className="subtitle-overlay"
           style={{ opacity: ttsSubtitle || isThinking ? 1 : 0 }}

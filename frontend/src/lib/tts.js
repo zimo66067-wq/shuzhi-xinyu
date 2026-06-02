@@ -159,7 +159,8 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
         sumSq += v * v
       }
       const rms = Math.sqrt(sumSq / timeData.length)
-      const volume = Math.min(1, rms * 3.2)
+      // 把 RMS 拉得敏感一点：中文 TTS 实测 RMS 多在 0.05-0.20 区间
+      const volume = Math.min(1, rms * 5.5)
 
       // 频域：3 个频段能量占比（任务 1 口型同步用）
       let lowBand = 0, midBand = 0, highBand = 0

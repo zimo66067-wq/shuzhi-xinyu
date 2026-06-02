@@ -25,41 +25,46 @@ import { useRef, useCallback } from 'react'
 import { useFrame } from '@react-three/fiber'
 
 const VISEMES = ['aa', 'ih', 'ou', 'ee', 'oh']
-// 全局上限，避免嘴张得过夸张（卡通脸要克制）
-const VISEME_GAIN = 0.85
-// 噪音门限：音量小于此值整张嘴闭合（不抖）
-const SILENCE_THRESHOLD = 0.04
-// 平滑系数（越大越跟手，越小越柔）
-const LERP = 0.35
+// 全局上限：嘴最大张幅 1.0 = 完全张开
+const VISEME_GAIN = 1.0
+// 噪音门限：音量低于此值整张嘴闭合（不抖）
+const SILENCE_THRESHOLD = 0.025
+// 平滑系数：往目标值靠拢的速度（每帧）
+const LERP = 0.45
+// 音量灵敏度增益：实测中文 TTS 的 RMS 经常只有 0.1-0.3，需要拉一下
+const VOLUME_BOOST = 2.4
 
+/**
+ * 简化 + 强健的 viseme 选择策略：
+ * 1. 不管什么音量，只要超过静音门限，"aa" 永远有基础开口（保证总能看到嘴动）
+ * 2. 再根据频段主导方向，叠加 ih / ou / ee / oh 增加丰富度
+ * 3. 输出值尽量大，方便实战中看清动作
+ */
 function pickViseme(volume, low, mid, high) {
-  // 静音时返回全零
-  if (volume < SILENCE_THRESHOLD) return { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 }
+  if (volume < SILENCE_THRESHOLD) {
+    return { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 }
+  }
 
-  const v = Math.min(1, volume * 1.4) // 拉伸到 [0,1]
+  const v = Math.min(1, volume * VOLUME_BOOST)
   const out = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 }
 
-  // 大开口（aa）：音量大 + 低频主导
-  if (v > 0.6 && low > mid && low > high) {
-    out.aa = v * 0.95
-  }
-  // 圆唇（oh）：中等音量 + 低频
-  else if (v > 0.3 && low >= mid) {
-    out.oh = v * 0.7
-    out.aa = v * 0.15 // 混一点 aa 避免太静态
-  }
-  // 撅嘴（ou）：中等音量 + 高频偏多
-  else if (high > mid && v > 0.25) {
-    out.ou = v * 0.65
-  }
-  // 扁拉（ee）：中音量 + 中高频主导
-  else if (mid > low && mid >= high) {
+  // 基础开口：永远跟音量走（这是关键）
+  out.aa = v * 0.65
+
+  // 根据主导频段叠加辅助 viseme，让嘴型有变化
+  if (low > mid && low > high) {
+    // 低频主导（"a/o/u" 类元音）：偏大开口 + 圆唇感
+    out.aa = v * 0.85
+    out.oh = v * 0.35
+  } else if (high > mid && high > low) {
+    // 高频主导（"i/e/s/sh" 类）：嘴角拉宽
+    out.aa = v * 0.30
     out.ee = v * 0.55
-    out.ih = v * 0.25
-  }
-  // 小开（ih）：其它情况兜底
-  else {
-    out.ih = v * 0.6
+    out.ou = v * 0.20
+  } else {
+    // 中频主导（多数辅音 + 中性元音）：小开口 + 撅嘴
+    out.aa = v * 0.55
+    out.ih = v * 0.35
   }
 
   return out
