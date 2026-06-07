@@ -1,6 +1,8 @@
 import { createEnvelope } from './speechEnvelope'
 
-const TTS_ENDPOINT = 'http://localhost:5000/api/tts'
+// 部署 env 化（任务 8）：开发走 vite proxy → 5000；生产用 VITE_API_BASE
+const API_BASE = import.meta.env.VITE_API_BASE || ''
+const TTS_ENDPOINT = `${API_BASE}/api/tts`
 
 let preferredVoiceCache = null
 

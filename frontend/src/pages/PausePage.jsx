@@ -54,7 +54,7 @@ function PausePage({ navigate }) {
           <div className="modal-content">
             <h3>请告诉爸爸妈妈</h3>
             <p className="subtitle" style={{ marginTop: '8px' }}>
-              {error || (busy ? '验证中...' : '输入密码结束训练')}
+              {error || (busy ? '验证中...' : '输入密码结束今天的对话')}
             </p>
             <input
               type="password"

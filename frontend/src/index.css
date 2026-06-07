@@ -949,3 +949,12 @@ h2 {
   font-weight: 600;
 }
 .scene-cell.past .scene-label { color: #6A8F76; }
+
+/* ============================================
+   任务 5：依恋护栏淡入动画
+   ASD 友好：≤300ms，无弹跳，纯透明度
+   ============================================ */
+@keyframes attachmentFadeIn {
+  from { opacity: 0; transform: translate(-50%, -48%); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}

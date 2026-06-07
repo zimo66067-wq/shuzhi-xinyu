@@ -5,6 +5,7 @@ import usePushToTalk from '../hooks/usePushToTalk'
 import { ChatContext } from '../App'
 import TrainingStepper, { stageFromRoundCount } from '../components/TrainingStepper'
 import ScenarioBanner from '../components/ScenarioBanner'
+import FaceMetrics from '../components/FaceMetrics'
 
 // 任务 1：根据心屿回复内容推断情绪表情（驱动 VRM expression）
 // 极简关键词匹配；命中多个时按优先级 happy > sad > surprised > relaxed
@@ -102,6 +103,13 @@ function ChatPage({ navigate }) {
 
   const [inputText, setInputText] = useState('')
   const [xinyuState, setXinyuState] = useState('idle')
+
+  // 家长视图开关：默认关闭，孩子视图看不到任何数值
+  const [showParentView, setShowParentView] = useState(false)
+
+  // 任务 5（Q5）：准社会依恋护栏 —— 进入 ChatPage 15 分钟后柔和提示去找朋友
+  // 每次进入页面重新计时；提示出现一次后这次会话不再弹
+  const [showAttachmentNudge, setShowAttachmentNudge] = useState(false)
   // 任务 1：声学状态扩展为 4 路（volume + 3 频段），驱动 VRM 5 个 viseme
   const [audioState, setAudioState] = useState({
     volume: 0, lowBand: 0, midBand: 0, highBand: 0,
@@ -216,6 +224,13 @@ function ChatPage({ navigate }) {
 
   // 离开页面取消 TTS
   useEffect(() => () => cancelTTS(), [])
+
+  // 任务 5：会话满 15 分钟弹出依恋护栏提示（一次即止）
+  useEffect(() => {
+    const ATTACHMENT_NUDGE_MS = 15 * 60 * 1000 // 15 分钟
+    const t = setTimeout(() => setShowAttachmentNudge(true), ATTACHMENT_NUDGE_MS)
+    return () => clearTimeout(t)
+  }, [])
 
   const sendMessage = async (text) => {
     if (!text.trim() || !isOnline) return
@@ -409,6 +424,23 @@ function ChatPage({ navigate }) {
           >
             🎙
           </button>
+          {/* 家长视图开关：默认关；开启后右下角悬浮卡显示面部 4 指标 */}
+          <button
+            className="btn-icon"
+            onClick={() => setShowParentView((v) => !v)}
+            title={showParentView ? '关闭家长视图' : '开启家长视图'}
+            aria-label="家长视图开关"
+            aria-pressed={showParentView}
+            style={{
+              fontSize: '12px',
+              minWidth: 'auto',
+              padding: '6px 10px',
+              background: showParentView ? '#A8D8B9' : undefined,
+              color: showParentView ? '#3F6B4F' : undefined,
+            }}
+          >
+            {showParentView ? '👨‍👩‍👧 关' : '👨‍👩‍👧'}
+          </button>
           <button
             className="btn-icon btn-pause top-pause"
             onClick={() => navigate('pause')}
@@ -419,8 +451,9 @@ function ChatPage({ navigate }) {
         </div>
       </div>
 
-      {/* 场景模式 → 场景横幅；自由聊天 → 5 阶段进度条 */}
-      {scenario ? (
+      {/* Q3 决策：自由聊天模式下隐藏 TrainingStepper，避免孩子看到"训练/阶段"措辞 */}
+      {/* 场景模式仍保留场景横幅（演示场景训练亮点用） */}
+      {scenario && (
         <ScenarioBanner
           scenario={scenario}
           currentScene={currentScene}
@@ -429,8 +462,6 @@ function ChatPage({ navigate }) {
             setCurrentScene(null)
           }}
         />
-      ) : (
-        <TrainingStepper currentStage={currentStage} />
       )}
 
       {/* 安抚提示条 */}
@@ -656,6 +687,48 @@ function ChatPage({ navigate }) {
           </button>
         </div>
       </div>
+
+      {/* 任务 5（Q5）：依恋护栏柔和提示 —— 建议去找真实朋友玩 */}
+      {showAttachmentNudge && (
+        <div
+          className="attachment-nudge"
+          role="dialog"
+          aria-label="温和提示"
+          style={{
+            position: 'fixed',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'var(--bg-card)',
+            color: 'var(--text-main)',
+            padding: '24px 28px',
+            borderRadius: '20px',
+            boxShadow: '0 12px 32px rgba(123, 109, 92, 0.18)',
+            maxWidth: '300px',
+            zIndex: 200,
+            textAlign: 'center',
+            animation: 'attachmentFadeIn 280ms ease-out',
+          }}
+        >
+          <div style={{ fontSize: '40px', marginBottom: '10px' }}>🌿</div>
+          <p style={{ fontSize: '16px', lineHeight: 1.7, marginBottom: '6px' }}>
+            聊了好久啦。
+          </p>
+          <p style={{ fontSize: '16px', lineHeight: 1.7, marginBottom: '18px' }}>
+            也找朋友玩玩吧。
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => setShowAttachmentNudge(false)}
+            style={{ width: '100%' }}
+          >
+            好的
+          </button>
+        </div>
+      )}
+
+      {/* 家长视图：仅 visible=true 时启用摄像头 + 加载 MediaPipe */}
+      <FaceMetrics visible={showParentView} />
     </div>
   )
 }

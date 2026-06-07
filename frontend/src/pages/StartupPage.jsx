@@ -11,6 +11,11 @@ function StartupPage({ navigate }) {
   const [name, setName] = useState(childInfo?.name || '')
   const [age, setAge] = useState(childInfo?.age ?? null)
 
+  // 任务 6（Q4）：首次启动 vs 再次启动 — 不同叙事
+  //   首次：家长设置模式（标题、文案面向成人）
+  //   再次：已有 childInfo → 简洁问候 + 一键继续
+  const isFirstSetup = !childInfo
+
   // 长按家长入口的进度（0-1）
   const [pressProgress, setPressProgress] = useState(0)
   const [showHint, setShowHint] = useState(false)
@@ -73,9 +78,29 @@ function StartupPage({ navigate }) {
       }}
     >
       <div className="startup-circle" style={{ marginBottom: '16px' }}></div>
-      <h1 style={{ marginBottom: '24px' }}>心屿等你来玩!</h1>
+      <h1 style={{ marginBottom: '8px' }}>
+        {isFirstSetup ? '为孩子设置心屿' : `心屿等${childInfo?.name}回来`}
+      </h1>
+      {isFirstSetup && (
+        <p
+          className="subtitle"
+          style={{ fontSize: '15px', marginBottom: '20px' }}
+        >
+          家长引导：填写孩子信息后，由孩子独立和心屿对话
+        </p>
+      )}
+      {!isFirstSetup && (
+        <p
+          className="subtitle"
+          style={{ fontSize: '15px', marginBottom: '20px' }}
+        >
+          {childInfo?.age} 岁的小朋友
+        </p>
+      )}
 
-      <p className="startup-label">你叫什么名字？</p>
+      <p className="startup-label">
+        {isFirstSetup ? '孩子叫什么名字？' : '小朋友的名字'}
+      </p>
       <input
         className="startup-input"
         type="text"
@@ -86,7 +111,9 @@ function StartupPage({ navigate }) {
         aria-label="输入孩子姓名"
       />
 
-      <p className="startup-label">你几岁了？</p>
+      <p className="startup-label">
+        {isFirstSetup ? '孩子几岁了？' : '几岁了'}
+      </p>
       <div className="age-grid">
         {AGE_OPTIONS.map((a) => (
           <button
@@ -106,10 +133,48 @@ function StartupPage({ navigate }) {
         onClick={handleStart}
         disabled={!canSubmit}
         style={{ opacity: canSubmit ? 1 : 0.4, marginTop: '8px' }}
-        aria-label="开始和心屿聊天"
+        aria-label={isFirstSetup ? '设置完成进入对话' : '继续和心屿玩'}
       >
-        开始和心屿聊天 🌟
+        {isFirstSetup ? '设置完成 · 让孩子开始 🌟' : '继续和心屿玩 🌟'}
       </button>
+
+      {/* 已有孩子信息时：提供"换一个孩子"小入口 */}
+      {!isFirstSetup && (
+        <button
+          onClick={() => {
+            setChildInfo(null)
+            setMessages([])
+            setName('')
+            setAge(null)
+          }}
+          style={{
+            marginTop: '10px',
+            fontSize: '13px',
+            color: 'var(--text-sub)',
+            background: 'transparent',
+            padding: '6px 12px',
+            textDecoration: 'underline',
+            opacity: 0.7,
+          }}
+          aria-label="换一个孩子使用"
+        >
+          换一个孩子使用
+        </button>
+      )}
+
+      {/* Q0 防御性声明：本产品为比赛作品演示 */}
+      <div
+        style={{
+          marginTop: 'auto',
+          paddingTop: '24px',
+          fontSize: '12px',
+          color: 'var(--text-sub)',
+          textAlign: 'center',
+          opacity: 0.7,
+        }}
+      >
+        本产品为比赛作品演示
+      </div>
 
       {/* 家长入口：长按 3 秒带视觉进度 */}
       {showHint && (

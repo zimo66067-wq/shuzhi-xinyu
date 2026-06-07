@@ -44,6 +44,9 @@ build/
 *.blend
 *.blend1
 
+# ---- MediaPipe 资源（wasm + 模型，约 35MB，本地托管不入库）----
+frontend/public/mediapipe/
+
 # ---- KTX2 transcoder（公共资源，部署时单独放） ----
 frontend/public/basis/
 frontend/dist/basis/

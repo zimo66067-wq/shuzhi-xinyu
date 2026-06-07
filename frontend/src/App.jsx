@@ -13,6 +13,12 @@ export const ChatContext = createContext(null)
 
 function App() {
   const [currentPage, setCurrentPage] = useState(() => {
+    // 任务 4b：URL 直达支持（不引 react-router，仅在启动时读 pathname）
+    // /parent → 家长后台；其它路径走 localStorage 上次的页面或 startup
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.replace(/\/$/, '')
+      if (path === '/parent') return 'parent'
+    }
     return localStorage.getItem('xinyu_currentPage') || 'startup'
   })
 

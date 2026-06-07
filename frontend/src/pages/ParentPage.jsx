@@ -218,15 +218,38 @@ function ParentPage({ navigate }) {
         {/* 雷达图 */}
         {score && score.dimensions && (
           <section>
-            <h3
+            <div
               style={{
-                fontSize: '16px',
-                color: 'var(--text-main)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 marginBottom: '8px',
               }}
             >
-              🌟 5 维社交能力评估
-            </h3>
+              <h3
+                style={{
+                  fontSize: '16px',
+                  color: 'var(--text-main)',
+                  margin: 0,
+                }}
+              >
+                🌟 5 维社交能力评估
+              </h3>
+              {/* Q0 防御性声明：仅演示 · 非临床 */}
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--text-sub)',
+                  background: 'var(--bg-card)',
+                  padding: '3px 10px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--text-sub)',
+                  opacity: 0.75,
+                }}
+              >
+                仅演示 · 非临床
+              </span>
+            </div>
             <div
               style={{
                 backgroundColor: 'var(--bg-card)',
