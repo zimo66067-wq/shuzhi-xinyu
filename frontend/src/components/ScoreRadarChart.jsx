@@ -41,7 +41,7 @@ function ScoreRadarChart({ dimensions }) {
             tick={{ fill: '#A89B8A', fontSize: 10 }}
           />
           <Radar
-            name="心屿评估"
+            name="本次练习"
             dataKey="score"
             stroke="#FFD4D4"
             fill="#FFD4D4"

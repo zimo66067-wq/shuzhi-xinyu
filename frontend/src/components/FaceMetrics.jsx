@@ -87,7 +87,7 @@ const SILENT_METRICS = {
 
 const pct = (v) => (v == null ? '--' : `${Math.round(v * 100)}`)
 
-function FaceMetrics({ visible }) {
+function FaceMetrics({ visible, onCancel }) {
   const videoRef = useRef(null)
   const landmarkerRef = useRef(null)
   const streamRef = useRef(null)
@@ -97,14 +97,17 @@ function FaceMetrics({ visible }) {
   const [metrics, setMetrics] = useState(SILENT_METRICS)
   const [error, setError] = useState('') // '' | 'permission' | 'model' | 'camera'
   const [loading, setLoading] = useState(false)
+  // P-2：开启摄像头前需家长一次性确认；每次关闭后重置，下次开启重新确认
+  const [confirmed, setConfirmed] = useState(false)
 
   useEffect(() => {
-    if (!visible) {
-      // 关闭：清理一切
+    // P-2：未确认前绝不启动摄像头；visible 关闭时一并重置确认态
+    if (!visible || !confirmed) {
       cleanup()
       setMetrics(SILENT_METRICS)
       setError('')
       setLoading(false)
+      if (!visible) setConfirmed(false)
       return
     }
 
@@ -253,9 +256,9 @@ function FaceMetrics({ visible }) {
       cancelled = true
       cleanup()
     }
-    // visible 变化时跑一次完整 effect
+    // visible / confirmed 变化时跑一次完整 effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible])
+  }, [visible, confirmed])
 
   function cleanup() {
     if (rafRef.current) {
@@ -282,6 +285,41 @@ function FaceMetrics({ visible }) {
   }
 
   if (!visible) return null
+
+  // P-2：开启摄像头前的一次性确认（仅本地处理、不上传、不录像）
+  if (!confirmed) {
+    return (
+      <div
+        className="modal-overlay"
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 120 }}
+        role="dialog"
+        aria-label="开启摄像头确认"
+      >
+        <div className="modal-content" style={{ maxWidth: '320px' }}>
+          <div style={{ fontSize: '40px', marginBottom: '8px' }}>📷</div>
+          <h3>开启摄像头？</h3>
+          <p
+            className="subtitle"
+            style={{ marginTop: '8px', fontSize: '14px', lineHeight: 1.7 }}
+          >
+            即将开启摄像头做面部表情参考，仅在本机处理、不上传、不录像。是否继续？
+          </p>
+          <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
+            <button
+              className="btn-primary"
+              style={{ backgroundColor: 'var(--text-sub)', color: 'white' }}
+              onClick={() => onCancel?.()}
+            >
+              取消
+            </button>
+            <button className="btn-primary" onClick={() => setConfirmed(true)}>
+              继续
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // 状态文案
   let statusText = null

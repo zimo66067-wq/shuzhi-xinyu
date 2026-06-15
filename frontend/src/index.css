@@ -958,3 +958,138 @@ h2 {
   from { opacity: 0; transform: translate(-50%, -48%); }
   to   { opacity: 1; transform: translate(-50%, -50%); }
 }
+
+/* ============================================
+   整改 A-3：危机"叫大人"按钮（安抚横幅内，醒目优先）
+   ============================================ */
+.btn-call-adult {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-btn);
+  background-color: var(--alert-soft);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 14px rgba(255, 153, 153, 0.5);
+}
+.btn-call-adult:active { opacity: 0.85; }
+
+/* ============================================
+   整改 A-6：感官设置开关（家长区）
+   ============================================ */
+.toggle-switch {
+  width: 46px;
+  height: 26px;
+  border-radius: 13px;
+  background-color: #D9CFC2;
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color 200ms ease;
+}
+.toggle-switch.on { background-color: var(--soft-feedback); }
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 200ms ease;
+}
+.toggle-switch.on .toggle-knob { transform: translateX(20px); }
+
+/* ============================================
+   整改 A-2：监护人知情同意页
+   ============================================ */
+.consent-page {
+  padding: 16px 20px;
+  align-items: center;
+}
+.consent-card {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+.consent-section { margin-bottom: 12px; }
+.consent-h {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+.consent-ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--text-main);
+  line-height: 1.7;
+}
+.consent-highlight {
+  background-color: #FFF3E0;
+  border-left: 3px solid var(--accent-deep);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #7B4A4A;
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.consent-note {
+  font-size: 13px;
+  color: var(--text-sub);
+  background-color: var(--bg-card);
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.consent-check input {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  accent-color: var(--accent-deep);
+}
+
+/* ============================================
+   整改 A-6：尊重"减少动态效果"——关闭非功能动画
+   （呼吸圈是功能性引导，单独保留）
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .breathe-circle {
+    animation-duration: 8s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+/* 家长设置"界面动画"关 → 给 App 外层挂 .reduce-motion，同样关闭非功能动画 */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+.reduce-motion .breathe-circle {
+  animation-duration: 8s !important;
+  animation-iteration-count: infinite !important;
+}

@@ -57,6 +57,52 @@ function App() {
     }
   })
 
+  // 整改 A-2：监护人知情同意。首次使用前必须取得；{agreed, timestamp}
+  const [consent, setConsent] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xinyu_consent')
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+  useEffect(() => {
+    if (consent) localStorage.setItem('xinyu_consent', JSON.stringify(consent))
+  }, [consent])
+  const agreeConsent = () => setConsent({ agreed: true, timestamp: Date.now() })
+
+  // 整改 A-6 + P-5/P-6：家长可配置项（单一 xinyu_settings，勿另起并行 store）
+  //  - autoTTS/animations/acoustic：感官开关（A-6）
+  //  - recordMode：录音方式 'hold'(长按) | 'tap'(点按切换)；minRecordMs：最短录音时长（P-5）
+  //  - ttsRate/ttsPitch/ttsVolume：朗读语速/音调/音量（P-6，默认 1.0 = 不改现状）
+  //  - sessionLimitMin：单次会话时长提醒分钟数（P-6）
+  const DEFAULT_SETTINGS = {
+    autoTTS: true,
+    animations: true,
+    acoustic: true,
+    recordMode: 'hold',
+    minRecordMs: 300,
+    ttsRate: 1.0,
+    ttsPitch: 1.0,
+    ttsVolume: 1.0,
+    sessionLimitMin: 15,
+  }
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xinyu_settings')
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS
+    } catch {
+      return DEFAULT_SETTINGS
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('xinyu_settings', JSON.stringify(settings))
+    } catch (e) {
+      console.debug('[App] settings 写入 localStorage 失败:', e)
+    }
+  }, [settings])
+
   // 持久化 childInfo
   useEffect(() => {
     if (childInfo) {
@@ -99,6 +145,22 @@ function App() {
       ...prev.slice(-49),
       { timestamp: Date.now(), ...features },
     ])
+  }
+
+  // P-3：永久删除本设备所有数据（清空全部 xinyu_* 键），回到首次启动态
+  // 清掉后跳回根路径并刷新：localStorage 已空 → 重新出现知情同意 + 录入
+  const wipeAllData = () => {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('xinyu_'))
+        .forEach((k) => localStorage.removeItem(k))
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith('xinyu_'))
+        .forEach((k) => sessionStorage.removeItem(k))
+    } catch (e) {
+      console.debug('[App] 清空本设备数据失败:', e)
+    }
+    window.location.href = '/'
   }
 
   const [isOnline, setIsOnline] = useState(
@@ -175,9 +237,17 @@ function App() {
         currentScene,
         setCurrentScene,
         isOnline,
+        consent,
+        agreeConsent,
+        settings,
+        setSettings,
+        wipeAllData,
       }}
     >
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div
+        className={settings.animations ? undefined : 'reduce-motion'}
+        style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      >
         {!isOnline && (
           <div className="offline-banner">网络断开了，心屿等你回来 🌙</div>
         )}

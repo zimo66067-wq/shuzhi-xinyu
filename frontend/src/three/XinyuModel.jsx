@@ -44,6 +44,7 @@ function XinyuModel({
   midBand = 0,
   highBand = 0,
   expression = 'neutral',
+  reduceMotion = false,
 }) {
   const groupRef = useRef()
   const vrmRef = useRef(null)
@@ -168,12 +169,13 @@ function XinyuModel({
     vrm.update(delta)
 
     // 浮动微动 + 朝向修正（朝向由 JSX rotation-y 设置，useFrame 强制保持）
+    // 整改 A-6：reduceMotion 时关闭浮动 + 思考摇头（保留眨眼），尊重"减少动态效果"
     if (groupRef.current) {
       const t = performance.now() * 0.001
-      groupRef.current.position.y = Math.sin(t * 0.8) * 0.02
+      groupRef.current.position.y = reduceMotion ? 0 : Math.sin(t * 0.8) * 0.02
       groupRef.current.rotation.y = MODEL_FACING_Y // 见文件顶部常量
       groupRef.current.rotation.z =
-        state === 'thinking' ? Math.sin(t * 0.7) * 0.04 : 0
+        !reduceMotion && state === 'thinking' ? Math.sin(t * 0.7) * 0.04 : 0
     }
 
     // 眨眼写回

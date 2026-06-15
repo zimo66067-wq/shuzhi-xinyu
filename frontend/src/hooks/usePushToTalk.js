@@ -14,6 +14,7 @@ function usePushToTalk({
   onTranscript,
   onSafetySignal,
   onAcousticSummary,
+  minRecordMs = 300, // P-5：最短录音时长，可由家长设置调整
 } = {}) {
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
@@ -92,7 +93,7 @@ function usePushToTalk({
       // 触发声学分析 hook 的 cleanup → 得到 summary，通过 onAcousticSummary 回传
       setAnalyzingStream(null)
 
-      if (elapsed < 300) {
+      if (elapsed < minRecordMs) {
         setError('按得太短了，再试一次')
         return
       }
@@ -120,7 +121,7 @@ function usePushToTalk({
       setAnalyzingStream(null)
       setError('停止录音失败')
     }
-  }, [onTranscript])
+  }, [onTranscript, minRecordMs])
 
   return {
     isRecording,

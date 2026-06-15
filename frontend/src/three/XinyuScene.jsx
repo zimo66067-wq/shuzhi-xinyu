@@ -57,6 +57,7 @@ function XinyuScene({
   midBand = 0,
   highBand = 0,
   expression = 'neutral',
+  reduceMotion = false,
 }) {
   return (
     <Canvas
@@ -87,6 +88,7 @@ function XinyuScene({
             midBand={midBand}
             highBand={highBand}
             expression={expression}
+            reduceMotion={reduceMotion}
           />
         </Suspense>
       </ModelErrorBoundary>

@@ -3,9 +3,12 @@ import XinyuScene from '../three/XinyuScene'
 import { speak, cancel as cancelTTS } from '../lib/tts'
 import usePushToTalk from '../hooks/usePushToTalk'
 import { ChatContext } from '../App'
-import TrainingStepper, { stageFromRoundCount } from '../components/TrainingStepper'
+import { stageFromRoundCount } from '../components/TrainingStepper'
 import ScenarioBanner from '../components/ScenarioBanner'
 import FaceMetrics from '../components/FaceMetrics'
+import PasswordGate from '../components/PasswordGate'
+import { getToken } from '../lib/parentAuth'
+import { API_BASE } from '../lib/api'
 
 // 任务 1：根据心屿回复内容推断情绪表情（驱动 VRM expression）
 // 极简关键词匹配；命中多个时按优先级 happy > sad > surprised > relaxed
@@ -99,13 +102,28 @@ function ChatPage({ navigate }) {
     currentScene,
     setCurrentScene,
     isOnline,
+    settings,
   } = useContext(ChatContext)
+
+  // 整改 A-6：界面动画总开关（家长设置）∪ 系统"减少动态效果"偏好 → 关闭模型浮动/摇头
+  const reduceMotion = useMemo(() => {
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    return !settings.animations || prefersReduced
+  }, [settings.animations])
 
   const [inputText, setInputText] = useState('')
   const [xinyuState, setXinyuState] = useState('idle')
+  // 整改 A-3：是否已点"叫大人"，用于把安抚横幅切换成"等大人来"文案
+  const [calledAdult, setCalledAdult] = useState(false)
 
   // 家长视图开关：默认关闭，孩子视图看不到任何数值
   const [showParentView, setShowParentView] = useState(false)
+  // 家长视图密码门：开启前必须通过家长密码（与家长后台评分同一把锁），
+  // 防止孩子自己点开看到 MediaPipe 面部指标等分析数据
+  const [showParentGate, setShowParentGate] = useState(false)
 
   // 任务 5（Q5）：准社会依恋护栏 —— 进入 ChatPage 15 分钟后柔和提示去找朋友
   // 每次进入页面重新计时；提示出现一次后这次会话不再弹
@@ -157,7 +175,7 @@ function ChatPage({ navigate }) {
   const handleSafetySignal = (level) => {
     console.debug('[Acoustic] 安全信号:', level)
     if (level === 'cry' || level === 'agitated') {
-      // 高紧急度：直接出安抚提示
+      // 高紧急度：直接出安抚提示（横幅内含"叫大人"按钮，整改 A-3）
       setShowComfort(true)
     } else if (level === 'silence') {
       // 沉默：在字幕区温和提示，不打断
@@ -166,7 +184,38 @@ function ChatPage({ navigate }) {
     }
   }
 
-  // STT + 声学
+  // 整改 A-3：危机指向真实成人。播一段温和提示音 + 把横幅切到"等大人来"。
+  // 提示音用 WebAudio 现场合成，不引入任何音频资源/依赖。
+  const callAdult = () => {
+    setCalledAdult(true)
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (AudioCtx) {
+        const ctx = new AudioCtx()
+        const beep = (freq, start, dur) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.value = freq
+          gain.gain.setValueAtTime(0.0001, ctx.currentTime + start)
+          gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.04)
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur)
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start(ctx.currentTime + start)
+          osc.stop(ctx.currentTime + start + dur)
+        }
+        // 两声柔和提示音，引起在场大人注意
+        beep(660, 0, 0.5)
+        beep(880, 0.55, 0.6)
+        setTimeout(() => ctx.close().catch(() => {}), 1500)
+      }
+    } catch (e) {
+      console.debug('[ChatPage] 提示音播放失败:', e)
+    }
+  }
+
+  // STT + 声学（声学监测可在家长设置关闭，整改 A-6）
   const {
     isRecording,
     isTranscribing,
@@ -177,11 +226,40 @@ function ChatPage({ navigate }) {
     stopRecording,
   } = usePushToTalk({
     onTranscript: (text) => sendMessage(text),
-    onSafetySignal: handleSafetySignal,
-    onAcousticSummary: (features) => pushAcousticFeatures(features),
+    onSafetySignal: settings.acoustic ? handleSafetySignal : undefined,
+    onAcousticSummary: settings.acoustic
+      ? (features) => pushAcousticFeatures(features)
+      : undefined,
+    minRecordMs: settings.minRecordMs, // P-5：最短录音时长可调
   })
 
   const micUnavailable = !sttSupported || micDenied
+
+  // P-5：录音方式——'tap' 点按切换（点一下开始/再点停止）；否则沿用长按。文字输入路径不变。
+  const tapMode = settings.recordMode === 'tap'
+  const micHandlers = tapMode
+    ? {
+        onClick: () => {
+          if (micUnavailable || isTranscribing || !isOnline) return
+          if (isRecording) stopRecording()
+          else startRecording()
+        },
+      }
+    : {
+        onPointerDown: (e) => {
+          e.preventDefault()
+          if (!micUnavailable && isOnline) startRecording()
+        },
+        onPointerUp: () => {
+          if (isRecording) stopRecording()
+        },
+        onPointerLeave: () => {
+          if (isRecording) stopRecording()
+        },
+        onPointerCancel: () => {
+          if (isRecording) stopRecording()
+        },
+      }
 
   // 录音/识别状态联动
   useEffect(() => {
@@ -225,12 +303,12 @@ function ChatPage({ navigate }) {
   // 离开页面取消 TTS
   useEffect(() => () => cancelTTS(), [])
 
-  // 任务 5：会话满 15 分钟弹出依恋护栏提示（一次即止）
+  // 任务 5 + P-6：会话满 N 分钟弹出依恋护栏提示（一次即止）；N 由家长设置 sessionLimitMin 决定
   useEffect(() => {
-    const ATTACHMENT_NUDGE_MS = 15 * 60 * 1000 // 15 分钟
-    const t = setTimeout(() => setShowAttachmentNudge(true), ATTACHMENT_NUDGE_MS)
+    const minutes = settings.sessionLimitMin || 15
+    const t = setTimeout(() => setShowAttachmentNudge(true), minutes * 60 * 1000)
     return () => clearTimeout(t)
-  }, [])
+  }, [settings.sessionLimitMin])
 
   const sendMessage = async (text) => {
     if (!text.trim() || !isOnline) return
@@ -257,7 +335,7 @@ function ChatPage({ navigate }) {
       : newMessages
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -306,8 +384,20 @@ function ChatPage({ navigate }) {
 
       setMessages([...newMessages, { role: 'assistant', content: reply }])
       setTtsSubtitle(reply)
+
+      // 整改 A-6：自动朗读开关关闭时，只显示字幕、不播 TTS
+      if (!settings.autoTTS) {
+        setXinyuState('idle')
+        setTimeout(() => setXinyuExpression('neutral'), 600)
+        return
+      }
+
       setXinyuState('speaking')
       await speak(reply, {
+        // P-6：语速/音调/音量走家长设置
+        rate: settings.ttsRate,
+        pitch: settings.ttsPitch,
+        volume: settings.ttsVolume,
         // 任务 1：onVolume 现在收到 {volume, lowBand, midBand, highBand}
         onVolume: (s) => {
           if (typeof s === 'number') {
@@ -347,6 +437,10 @@ function ChatPage({ navigate }) {
     setXinyuState('speaking')
     setXinyuExpression('happy')
     await speak(sample, {
+      // P-6：语速/音调/音量走家长设置
+      rate: settings.ttsRate,
+      pitch: settings.ttsPitch,
+      volume: settings.ttsVolume,
       onVolume: (s) => {
         if (typeof s === 'number') {
           setAudioState({ volume: s, lowBand: 0.6, midBand: 0.3, highBand: 0.1 })
@@ -365,6 +459,19 @@ function ChatPage({ navigate }) {
 
   // 历史记录里过滤掉 system 消息（system 是发给后端用的，不展示给孩子）
   const visibleMessages = messages.filter((m) => m.role !== 'system')
+
+  // 切换家长视图：关闭随时可；开启必须已通过家长密码（无有效 token 就弹密码门）
+  const toggleParentView = () => {
+    if (showParentView) {
+      setShowParentView(false)
+      return
+    }
+    if (getToken()) {
+      setShowParentView(true)
+    } else {
+      setShowParentGate(true)
+    }
+  }
 
   return (
     <div className="page-container bg-training">
@@ -427,8 +534,8 @@ function ChatPage({ navigate }) {
           {/* 家长视图开关：默认关；开启后右下角悬浮卡显示面部 4 指标 */}
           <button
             className="btn-icon"
-            onClick={() => setShowParentView((v) => !v)}
-            title={showParentView ? '关闭家长视图' : '开启家长视图'}
+            onClick={toggleParentView}
+            title={showParentView ? '关闭家长视图' : '开启家长视图（需家长密码）'}
             aria-label="家长视图开关"
             aria-pressed={showParentView}
             style={{
@@ -464,32 +571,62 @@ function ChatPage({ navigate }) {
         />
       )}
 
-      {/* 安抚提示条 */}
+      {/* 安抚提示条（整改 A-3：醒目"叫大人"按钮，危机指向真实成人） */}
       {showComfort && (
         <div className="comfort-banner" role="dialog" aria-label="温和提示">
-          <div className="comfort-banner-text">
-            心屿发现你可能需要休息一下，要去看看小工具吗？🌿
-          </div>
-          <div className="comfort-banner-actions">
-            <button
-              onClick={() => {
-                setShowComfort(false)
-                setComfortHits(0)
-              }}
-            >
-              继续聊天
-            </button>
-            <button
-              className="primary"
-              onClick={() => {
-                setShowComfort(false)
-                setComfortHits(0)
-                navigate('toolbox')
-              }}
-            >
-              去看看
-            </button>
-          </div>
+          {calledAdult ? (
+            <>
+              <div className="comfort-banner-text">
+                我们一起等大人来，好吗？🌿
+              </div>
+              <div className="comfort-banner-actions">
+                <button
+                  className="primary"
+                  onClick={() => {
+                    setShowComfort(false)
+                    setComfortHits(0)
+                    setCalledAdult(false)
+                  }}
+                >
+                  好
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="comfort-banner-text">
+                心屿发现你可能需要休息一下。如果不舒服，按下面的按钮叫大人来。🌿
+              </div>
+              {/* 第一优先：叫真实成人 */}
+              <button
+                className="btn-call-adult"
+                onClick={callAdult}
+                aria-label="按这里叫大人来"
+              >
+                🔔 按这里叫大人来
+              </button>
+              <div className="comfort-banner-actions">
+                <button
+                  onClick={() => {
+                    setShowComfort(false)
+                    setComfortHits(0)
+                  }}
+                >
+                  继续聊天
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    setShowComfort(false)
+                    setComfortHits(0)
+                    navigate('toolbox')
+                  }}
+                >
+                  去看看
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -503,6 +640,7 @@ function ChatPage({ navigate }) {
             midBand={audioState.midBand}
             highBand={audioState.highBand}
             expression={xinyuExpression}
+            reduceMotion={reduceMotion}
           />
         </div>
 
@@ -638,21 +776,9 @@ function ChatPage({ navigate }) {
         <div className="input-row-inline">
           <button
             className={`btn-mic ${isRecording ? 'recording' : ''}`}
-            onPointerDown={(e) => {
-              e.preventDefault()
-              if (!micUnavailable && isOnline) startRecording()
-            }}
-            onPointerUp={() => {
-              if (isRecording) stopRecording()
-            }}
-            onPointerLeave={() => {
-              if (isRecording) stopRecording()
-            }}
-            onPointerCancel={() => {
-              if (isRecording) stopRecording()
-            }}
+            {...micHandlers}
             disabled={micUnavailable || isTranscribing || !isOnline}
-            style={{ touchAction: 'none' }}
+            style={{ touchAction: tapMode ? 'manipulation' : 'none' }}
             title={
               micDenied
                 ? '麦克风权限被拒，请用打字'
@@ -660,9 +786,15 @@ function ChatPage({ navigate }) {
                 ? '浏览器不支持麦克风'
                 : !isOnline
                 ? '网络断开'
+                : tapMode
+                ? isRecording
+                  ? '点一下停止'
+                  : '点一下说话'
                 : '按住说话'
             }
-            aria-label="按住说话"
+            aria-label={
+              tapMode ? (isRecording ? '点一下停止' : '点一下说话') : '按住说话'
+            }
           >
             {isTranscribing ? '⏳' : '🎤'}
           </button>
@@ -727,8 +859,19 @@ function ChatPage({ navigate }) {
         </div>
       )}
 
-      {/* 家长视图：仅 visible=true 时启用摄像头 + 加载 MediaPipe */}
-      <FaceMetrics visible={showParentView} />
+      {/* 家长视图密码门：孩子点开关但未授权时弹出，输对家长密码才放行 */}
+      {showParentGate && (
+        <PasswordGate
+          onSuccess={() => {
+            setShowParentGate(false)
+            setShowParentView(true)
+          }}
+          onCancel={() => setShowParentGate(false)}
+        />
+      )}
+
+      {/* 家长视图：仅 visible=true 时启用；P-2 摄像头开启前还有一次性确认（取消即关闭家长视图） */}
+      <FaceMetrics visible={showParentView} onCancel={() => setShowParentView(false)} />
     </div>
   )
 }

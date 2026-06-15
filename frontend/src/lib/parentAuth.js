@@ -11,6 +11,8 @@
  * - token 自带过期时间，过期后强制重新输密码
  */
 
+import { API_BASE } from './api'
+
 const STORAGE_KEY = 'xinyu_parent_token'
 
 /**
@@ -20,7 +22,7 @@ const STORAGE_KEY = 'xinyu_parent_token'
  */
 export async function verify(password) {
   try {
-    const res = await fetch('/api/parent/verify', {
+    const res = await fetch(`${API_BASE}/api/parent/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password }),

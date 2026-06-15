@@ -1,11 +1,13 @@
 import { useContext, useRef, useState } from 'react'
 import { ChatContext } from '../App'
+import ConsentGate from '../components/ConsentGate'
 
 const AGE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, '10+']
 const ADMIN_HOLD_MS = 3000
 
 function StartupPage({ navigate }) {
-  const { childInfo, setChildInfo, setMessages } = useContext(ChatContext)
+  const { childInfo, setChildInfo, setMessages, consent, agreeConsent } =
+    useContext(ChatContext)
 
   // 预填上次的名字+年龄
   const [name, setName] = useState(childInfo?.name || '')
@@ -66,6 +68,11 @@ function StartupPage({ navigate }) {
 
   // admin 按钮填充高度（0-100%）
   const fillPercent = Math.round(pressProgress * 100)
+
+  // 整改 A-2：首次使用、采集姓名/年龄前，先过监护人知情同意；未同意不放行
+  if (isFirstSetup && !consent?.agreed) {
+    return <ConsentGate onAgree={agreeConsent} />
+  }
 
   return (
     <div

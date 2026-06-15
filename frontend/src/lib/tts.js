@@ -1,7 +1,7 @@
 import { createEnvelope } from './speechEnvelope'
+import { API_BASE } from './api'
 
-// 部署 env 化（任务 8）：开发走 vite proxy → 5000；生产用 VITE_API_BASE
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+// 后端地址统一从 lib/api.js 取（开发走 vite proxy → 5000；生产用 VITE_API_BASE）
 const TTS_ENDPOINT = `${API_BASE}/api/tts`
 
 let preferredVoiceCache = null
@@ -75,7 +75,7 @@ export function cancel() {
   }
 }
 
-async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
+async function speakWithEdgeTTS(text, { onVolume, onEnd, rate = 1, volume = 1 }) {
   const response = await fetch(TTS_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -92,6 +92,9 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd }) {
   return new Promise((resolve) => {
     const audio = new Audio(url)
     audio.crossOrigin = 'anonymous'
+    // P-6：把家长设置的音量/语速应用到腾讯云音频（默认 1.0 = 不改现状；pitch 仅 Web Speech 兜底消费）
+    audio.volume = Math.max(0, Math.min(1, volume))
+    audio.playbackRate = Math.max(0.5, Math.min(2, rate))
     currentAudio = audio
 
     const AudioCtx = window.AudioContext || window.webkitAudioContext
@@ -264,15 +267,15 @@ export async function speak(text, options = {}) {
   cancel()
 
   const {
-    rate = 0.85,
-    pitch = 1.1,
+    rate = 1.0,
+    pitch = 1.0,
     volume = 1.0,
     onVolume = () => {},
     onEnd = () => {},
   } = options
 
   try {
-    await speakWithEdgeTTS(text, { onVolume, onEnd })
+    await speakWithEdgeTTS(text, { onVolume, onEnd, rate, volume })
     return
   } catch (e) {
     console.warn('[TTS] edge-tts 不可用，降级 Web Speech:', e.message)

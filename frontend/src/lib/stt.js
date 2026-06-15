@@ -1,5 +1,6 @@
-// 部署 env 化（任务 8）：开发走 vite proxy → 5000；生产用 VITE_API_BASE
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+import { API_BASE } from './api'
+
+// 后端地址统一从 lib/api.js 取（开发走 vite proxy → 5000；生产用 VITE_API_BASE）
 const STT_ENDPOINT = `${API_BASE}/api/stt`
 
 function pickSupportedMimeType() {
