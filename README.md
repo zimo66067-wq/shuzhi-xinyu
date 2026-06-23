@@ -66,7 +66,7 @@
 | 评分可视化 | Recharts | - |
 | 状态管理 | React Context + localStorage | - |
 
-> 注：早期曾用 Gemini 作降级、edge-tts/Web Speech 作 TTS、emoji/glb 作 3D，均已分别被 DeepSeek 单模型、腾讯云、VRM 取代。
+> 注：早期曾用 edge-tts / Web Speech 作 TTS、emoji 占位 / glb 作 3D，均已分别被腾讯云 TTS、VRM 取代。LLM 仅采用 DeepSeek 单一 provider。
 
 数据流：
 ```

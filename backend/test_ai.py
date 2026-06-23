@@ -1,7 +1,7 @@
 """
 test_ai.py — 独立测试脚本
 不依赖 Flask，直接调用 ai_service 的三个函数并打印结果。
-运行前请确保环境变量已设置：DEEPSEEK_API_KEY 或 GEMINI_API_KEY
+运行前请确保环境变量已设置：DEEPSEEK_API_KEY
 用法：python test_ai.py
 """
 
@@ -142,7 +142,7 @@ def test_report_with_history() -> bool:
 
 if __name__ == "__main__":
     print("\n数智心屿 AI 服务层 — 单元测试")
-    print("确保 DEEPSEEK_API_KEY 或 GEMINI_API_KEY 已设置\n")
+    print("确保 DEEPSEEK_API_KEY 已设置\n")
 
     results = {
         "chat":              test_chat(),

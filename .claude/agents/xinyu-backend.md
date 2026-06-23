@@ -64,7 +64,7 @@ tools: Read, Edit, Write, Glob, Grep, PowerShell
 
 - ❌ 不要去改 `frontend/` 任何文件
 - ❌ 不要把任何 key/secret 写进代码文件
-- ❌ 不要随便加新 LLM provider（已经从 Gemini 退回 DeepSeek 单一）
+- ❌ 不要加任何新的 LLM provider — 本项目**硬性要求只使用 DeepSeek**，禁止再引入 OpenAI / Claude / 文心 / 通义 等做主路径或降级备选
 - ❌ 不要从 prompt 里删 ASD 安全约束
 - ❌ 不要把音频文件持久化到磁盘（PRIVACY.md 承诺过）
 

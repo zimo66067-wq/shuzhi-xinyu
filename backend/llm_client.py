@@ -1,5 +1,5 @@
 """
-llm_client.py — LLM 调用层（DeepSeek）
+llm_client.py — LLM 调用层（DeepSeek 单一）
 
 设计要点：
   - 单一 LLM：DeepSeek `deepseek-chat`（V3 对话模型）
@@ -7,7 +7,11 @@ llm_client.py — LLM 调用层（DeepSeek）
   - 失败永不抛异常：返回兜底字符串 FALLBACK_REPLY，由上层决定是否提示用户
   - 调用源通过 get_last_source() 暴露给运维（"deepseek" / "fallback" / "none"）
 
-历史说明：曾经支持 Gemini 作为降级备选，后按用户要求移除。
+⚠️ 硬性约束（不可违反）：
+  - 本模块**只允许**调用 DeepSeek，禁止以任何形式引入其他 LLM provider
+    （包括但不限于 OpenAI / Claude / 文心 / 通义 等）作为降级或主路径
+  - 禁止在任何地方读取除 DEEPSEEK_API_KEY 之外的 LLM API 密钥环境变量
+  - 如未来确需多 provider，必须先经产品评审 + 隐私政策（PRIVACY.md）同步更新
 """
 
 import logging

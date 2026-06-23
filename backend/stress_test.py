@@ -37,7 +37,7 @@ def register(layer: str, cid: str, name: str):
 
 
 def has_api_key() -> bool:
-    return bool(os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+    return bool(os.environ.get("DEEPSEEK_API_KEY"))
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -55,7 +55,6 @@ def test_a1():
 @register("A", "2", "缺 API Key 时降级到兜底")
 def test_a2():
     saved_d = os.environ.pop("DEEPSEEK_API_KEY", None)
-    saved_g = os.environ.pop("GEMINI_API_KEY", None)
     try:
         from ai_service import chat
         out = chat([{"role": "user", "content": "你好"}])
@@ -64,8 +63,6 @@ def test_a2():
     finally:
         if saved_d:
             os.environ["DEEPSEEK_API_KEY"] = saved_d
-        if saved_g:
-            os.environ["GEMINI_API_KEY"] = saved_g
 
 
 @register("A", "3", "messages 字段缺 role/content")
@@ -196,28 +193,9 @@ def test_b6():
     return ok, f"过滤后：{filtered!r}"
 
 
-@register("B", "7", "Gemini 首条非 user 时安全报错")
-def test_b7():
-    from llm_client import call_gemini
-    bad_messages = [
-        {"role": "assistant", "content": "你好"},
-        {"role": "assistant", "content": "再问一次"},
-    ]
-    try:
-        call_gemini("test", bad_messages)
-        return False, "应当抛出 ValueError 但未抛出"
-    except ValueError as e:
-        msg = str(e)
-        ok = "user" in msg or "API_KEY" in msg or "未设置" in msg
-        return ok, f"正确抛出 ValueError：{msg[:40]}"
-    except Exception as e:
-        return False, f"非预期异常：{type(e).__name__}: {e}"
-
-
 @register("B", "8", "兜底字符串可被 source 标识识别")
 def test_b8():
     saved_d = os.environ.pop("DEEPSEEK_API_KEY", None)
-    saved_g = os.environ.pop("GEMINI_API_KEY", None)
     try:
         import importlib
         import llm_client
@@ -230,8 +208,6 @@ def test_b8():
     finally:
         if saved_d:
             os.environ["DEEPSEEK_API_KEY"] = saved_d
-        if saved_g:
-            os.environ["GEMINI_API_KEY"] = saved_g
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -313,10 +289,9 @@ def test_c4():
 
 def run_all():
     print("\n" + "═" * 64)
-    print(f"  数智心屿 AI 压力测试 · 三层 16 用例（5维度）")
+    print(f"  数智心屿 AI 压力测试 · 三层 15 用例（5维度）")
     print(f"  模式：{'离线' if OFFLINE else '完整'}")
-    print(f"  API Key：DeepSeek={'有' if os.environ.get('DEEPSEEK_API_KEY') else '无'}，"
-          f"Gemini={'有' if os.environ.get('GEMINI_API_KEY') else '无'}")
+    print(f"  API Key：DeepSeek={'有' if os.environ.get('DEEPSEEK_API_KEY') else '无'}")
     print("═" * 64)
 
     current_layer = ""
