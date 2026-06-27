@@ -7,6 +7,8 @@ import GoalTracker from '../components/GoalTracker'
 import { authHeader, getToken } from '../lib/parentAuth'
 import { API_BASE } from '../lib/api'
 import TrainingLogPanel from '../components/TrainingLogPanel'
+import ArchiveReportPanel from '../components/ArchiveReportPanel'
+import { exportChildData, importChildData } from '../lib/dataTransfer'
 
 // 整改 A-5：纵向评分历史（本地，沿用 xinyu_ 前缀）
 const SCORE_HISTORY_KEY = 'xinyu_scoreHistory'
@@ -28,6 +30,7 @@ function ParentPage({ navigate }) {
     settings,
     setSettings,
     wipeAllData,
+    consent,
   } = useContext(ChatContext)
 
   const [authenticated, setAuthenticated] = useState(false)
@@ -38,6 +41,13 @@ function ParentPage({ navigate }) {
   const [showLogPanel, setShowLogPanel] = useState(false)
   // 整改 A-5：跨次趋势数据（家长区专用）
   const [scoreHistory, setScoreHistory] = useState(loadScoreHistory)
+  // F5：阶段性进度存档报告面板
+  const [showArchive, setShowArchive] = useState(false)
+  // F6：跨设备迁移——导出化名弹框 + 同意再确认 + 导入结果提示
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [exportAlias, setExportAlias] = useState('')
+  const [exportReaffirm, setExportReaffirm] = useState(false)
+  const [transferMsg, setTransferMsg] = useState('')
 
   const visibleMessages = messages.filter((m) => m.role !== 'system')
   const conversationReady = visibleMessages.length >= 2
@@ -94,6 +104,42 @@ function ParentPage({ navigate }) {
     const okAgain = window.confirm('再次确认：这一步不能撤销。真的要永久删除吗？')
     if (!okAgain) return
     wipeAllData?.()
+  }
+
+  // F6：打开「跨设备迁移」导出弹框（化名空白、需治疗师手填 + 同意再确认）
+  const handleOpenExport = () => {
+    setExportAlias('')
+    setExportReaffirm(false)
+    setTransferMsg('')
+    setShowExportDialog(true)
+  }
+
+  // F6：确认导出——产出最小化 JSON（仅化名 + 训练指标，无真名/对话/录音）
+  const handleConfirmExport = () => {
+    const alias = exportAlias.trim()
+    if (!alias || !exportReaffirm) return
+    const res = exportChildData(alias)
+    setShowExportDialog(false)
+    setTransferMsg(
+      res.ok
+        ? `已导出「${alias}」的训练数据（${res.count} 次记录）。请通过本地文件手动传递，勿上传网络。`
+        : res.error || '导出失败',
+    )
+  }
+
+  // F6：选择文件导入——校验 + 合并去重写入 xinyu_scoreHistory（删除路径已覆盖）
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允许重复选同一文件
+    if (!file) return
+    setTransferMsg('')
+    const res = await importChildData(file)
+    if (res.ok) {
+      setScoreHistory(loadScoreHistory()) // 刷新趋势数据
+      setTransferMsg(`导入完成：新增 ${res.added} 条，跳过重复 ${res.skipped} 条，当前共 ${res.total} 条。`)
+    } else {
+      setTransferMsg(`⚠️ ${res.error}`)
+    }
   }
 
   const handleGenerateReport = async () => {
@@ -430,6 +476,18 @@ function ParentPage({ navigate }) {
           </section>
         )}
 
+        {/* F5：阶段性进度存档报告入口（仅家长区，孩子界面零暴露） */}
+        {scoreHistory.length > 0 && (
+          <button
+            className="btn-primary"
+            onClick={() => setShowArchive(true)}
+            style={{ background: 'var(--soft-feedback)' }}
+            aria-label="查看阶段性进度存档报告"
+          >
+            📑 生成阶段报告
+          </button>
+        )}
+
         {/* P-4：IEP 式可追踪目标（复用 score.next_training + scoreHistory，仅家长区） */}
         <GoalTracker score={score} scoreHistory={scoreHistory} />
 
@@ -754,11 +812,65 @@ function ParentPage({ navigate }) {
             }}
           >
             <p style={{ fontSize: '13px', color: 'var(--text-sub)', lineHeight: 1.6 }}>
-              所有数据只存在这台设备上。可以导出一份备份，或永久删除全部数据。
+              所有数据只存在这台设备上。社交训练为主、评估为辅，以下数据仅供专业人员参考。
             </p>
-            <button className="btn-primary" onClick={handleExportData}>
-              ⬇️ 导出本设备数据（JSON）
+
+            {/* 本机完整备份（含原始数据，仅用于本机恢复） */}
+            <button
+              className="btn-primary"
+              onClick={handleExportData}
+              aria-label="本机完整备份"
+            >
+              💾 本机完整备份（含原始数据）
             </button>
+            <p style={{ fontSize: '12px', color: 'var(--text-sub)', lineHeight: 1.5, margin: '-4px 0 4px' }}>
+              含孩子信息与对话原文，仅用于本机恢复，<strong>勿传递他人</strong>。
+            </p>
+
+            {/* F6：跨设备迁移（最小化，仅化名 + 训练指标） */}
+            <button
+              className="btn-primary"
+              onClick={handleOpenExport}
+              style={{ background: 'var(--soft-feedback)' }}
+              aria-label="跨设备迁移导出"
+            >
+              📤 跨设备迁移（已最小化）
+            </button>
+            <p style={{ fontSize: '12px', color: 'var(--text-sub)', lineHeight: 1.5, margin: '-4px 0 4px' }}>
+              仅导出化名与训练指标，<strong>不含真名 / 对话 / 录音</strong>。本地文件手动传递，不上传网络。
+            </p>
+
+            {/* F6：导入另一台设备的迁移文件 */}
+            <label
+              className="btn-primary"
+              style={{ background: 'var(--soft-feedback)', textAlign: 'center', cursor: 'pointer', display: 'block' }}
+              aria-label="导入儿童训练数据"
+            >
+              📥 导入迁移文件（合并去重）
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={handleImportFile}
+                style={{ display: 'none' }}
+              />
+            </label>
+
+            {/* 迁移结果提示 */}
+            {transferMsg && (
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-main)',
+                  background: 'white',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  lineHeight: 1.6,
+                }}
+              >
+                {transferMsg}
+              </div>
+            )}
+
             <button
               className="btn-alert"
               onClick={handleWipeData}
@@ -766,6 +878,9 @@ function ParentPage({ navigate }) {
             >
               🗑 永久删除本设备数据
             </button>
+            <p style={{ fontSize: '12px', color: 'var(--text-sub)', lineHeight: 1.5, margin: '-4px 0 0' }}>
+              永久删除适用于本机全部数据，<strong>含导入进来的迁移数据</strong>，不可恢复。
+            </p>
           </div>
         </section>
 
@@ -809,6 +924,96 @@ function ParentPage({ navigate }) {
           report={reportText}
           onClose={() => setShowLogPanel(false)}
         />
+      )}
+
+      {/* F5：阶段性进度存档报告面板（密码门控内，覆盖层，孩子界面不可达） */}
+      {showArchive && (
+        <ArchiveReportPanel
+          scoreHistory={scoreHistory}
+          onClose={() => setShowArchive(false)}
+        />
+      )}
+
+      {/* F6：跨设备迁移导出弹框——化名空白手填 + 监护人同意再确认（合规第1条触点） */}
+      {showExportDialog && (
+        <div
+          className="modal-overlay"
+          style={{ position: 'fixed', inset: 0, zIndex: 200 }}
+          role="dialog"
+          aria-label="跨设备迁移导出"
+        >
+          <div className="modal-content" style={{ width: '100%', maxWidth: '360px', textAlign: 'left' }}>
+            <h3 style={{ marginBottom: '4px' }}>跨设备迁移 · 导出</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-sub)', lineHeight: 1.6, marginBottom: '14px' }}>
+              仅导出化名与训练指标，不含真名 / 对话 / 录音。社交训练为主、评估为辅。
+            </p>
+
+            <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-sub)', marginBottom: '6px' }} htmlFor="export-alias">
+              儿童化名（请勿填真名）
+            </label>
+            <input
+              id="export-alias"
+              type="text"
+              value={exportAlias}
+              onChange={(e) => setExportAlias(e.target.value)}
+              maxLength={20}
+              placeholder="请输入化名（如：小星）"
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '10px',
+                border: '1.5px solid var(--card-border)',
+                background: 'white',
+                color: 'var(--text-main)',
+                fontSize: '15px',
+                boxSizing: 'border-box',
+                marginBottom: '14px',
+              }}
+              aria-label="儿童化名"
+            />
+
+            <label
+              style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'flex-start',
+                fontSize: '13px',
+                color: 'var(--text-main)',
+                lineHeight: 1.5,
+                marginBottom: '16px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={exportReaffirm}
+                onChange={(e) => setExportReaffirm(e.target.checked)}
+                style={{ marginTop: '2px' }}
+              />
+              <span>我确认已取得监护人知情同意，且本文件仅含化名训练数据，将通过本地文件手动传递。</span>
+            </label>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                className="btn-primary"
+                style={{ flex: 1, background: 'var(--text-sub)', color: 'white' }}
+                onClick={() => setShowExportDialog(false)}
+              >
+                取消
+              </button>
+              <button
+                className="btn-primary"
+                style={{ flex: 1, opacity: exportAlias.trim() && exportReaffirm ? 1 : 0.4 }}
+                onClick={handleConfirmExport}
+                disabled={!exportAlias.trim() || !exportReaffirm}
+                aria-label="确认导出迁移文件"
+              >
+                确认导出
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
