@@ -278,6 +278,16 @@ function ParentPage({ navigate }) {
           </div>
         </section>
 
+        {/* F3：会话复核入口（密码门控内，孩子界面零暴露） */}
+        <button
+          className="btn-primary"
+          onClick={() => navigate('review')}
+          style={{ background: 'var(--text-sub)' }}
+          aria-label="进入会话复核与标注"
+        >
+          🗂 会话复核（治疗师标注）
+        </button>
+
         {/* 生成报告按钮 */}
         <button
           className="btn-primary"

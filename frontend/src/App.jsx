@@ -8,6 +8,7 @@ import OutsidePage from './pages/OutsidePage'
 import RestPage from './pages/RestPage'
 import ParentPage from './pages/ParentPage'
 import TherapistEntryPage from './pages/TherapistEntryPage'
+import SessionReviewPage from './pages/SessionReviewPage'
 
 // 全局对话上下文：孩子信息 + 完整 messages + 网络状态
 export const ChatContext = createContext(null)
@@ -219,6 +220,10 @@ function App() {
         return <ParentPage navigate={navigate} />
       case 'therapist':
         return <TherapistEntryPage navigate={navigate} />
+      case 'review':
+        // F3 会话复核：专业数据页，不加 /review pathname 直达（防未鉴权深链），
+        // 仅从已鉴权的家长后台 navigate 进入，页面内再做 token 二次门控
+        return <SessionReviewPage navigate={navigate} />
       default:
         return <StartupPage navigate={navigate} />
     }
