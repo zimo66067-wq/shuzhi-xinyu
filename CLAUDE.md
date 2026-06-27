@@ -195,3 +195,136 @@ shuzhi-xinyu/
 ## 整改进度（续，详见 docs/remediation-progress.md）
 > 第 2 轮（2026-06-15）已实现（前端）：声学措辞中性化 / 面部分析单独提示 / 导出+永久删除 / IEP 目标 / 点按录音 / 家长配置扩展
 > 仍阻塞：场景选择UI(待后端多场景)、PECS图卡(待素材+场景)、治疗师console(待单独重构)、本地加密(待密钥方案)
+
+---
+
+## 本轮更新（机构试点）路线与技术实施方案 · v2.0 / 2026-06
+
+> ⚠️ 精度声明：本章规则仅适用于「机构试点」本轮 scope。在本轮范围内，本章「后端改动决策
+> 阶梯」优先于前文「后端永久只读 / 禁止修改」条款。本轮目标为机构试点落地（康复中心 / 特殊
+> 教育学校），非竞赛演示；架构裁决为本地优先 + 结构化导出/导入，不上云。
+
+### 0. 本轮定位红线（不可移动）
+- 产品定位始终「社交训练为主、评估为辅」。对外措辞、报告、模板均不得出现「诊断」语义，
+  明确不替代专业诊断。
+- 禁止凭空生成临床框架映射（DSM-5 / ABA / 标准化量表）。评估/报告类内容只允许
+  「骨架模板 + 占位符 + 真实数据驱动」，绝不伪造证据。
+- 儿童端与专业端严格隔离：评分 / 声学 / 面部 / 标注 / 临床类数据永不出现在孩子界面，
+  只存在于密码门控的家长 / 治疗师视图。
+
+### 1. 后端改动决策阶梯（所有 session 共用，越靠前越优先）
+- 门控前提：本轮任何后端改动须先经后端队友确认 §0.2 后方可启动；确认前全部功能按纯前端
+  独立交付。首批六功能默认纯前端。
+- 阶梯①（首选·纯加）：仅在 app.py 注册新路由函数，复用 ai_service.py / llm_client.py 中
+  【已存在】的函数（import 后调用，不编辑这些文件）。
+- 阶梯②（加函数）：若无可复用函数 → 在 ai_service.py / llm_client.py【新增】helper 函数，
+  不修改任何既有函数。
+- 阶梯③（改既有·需批准）：仅当三者全满足才允许：(a) 不改变原可观察行为与任何现有契约；
+  (b) 有具体理由让原代码更优（去重 / 健壮性 / 可读性）并写明；(c) 已在计划阶段提出且获批准。
+  禁止静默修改。
+- prompts/ 既有文件不动；新增系统指令优先内联，确需独立文件只允许新增 prompt_format_log.txt。
+
+### 2. 整体路线图（Phase 0–3）
+| 阶段 | 内容 | 批次 | 验收标准 |
+| --- | --- | --- | --- |
+| Phase 0 准备 | 确认后端是否接受 additive 接口；锁定本地优先裁决；搭 src/lib（session/role）骨架 | 前置 | session.js 可读写 sessionConfig + 角色门控可用 |
+| Phase 1 首批 P0 | F1 → F2 →（搭车 F4） | 首批 | 治疗师登录→配置→孩子使用→课后一键生成训练记录并导出；可竞赛演示 |
+| Phase 2 第二波 | F3 → F5 → F6（F6 合规审慎） | 第二波 | 专业回放可标注；可生成阶段性存档报告；可跨设备归集 |
+| Phase 3 机构试点 | 携首批+第二波进康复中心/特教学校小范围试点；真实数据驱动占位符；按反馈迭代 | 落地 | ≥1 家机构完成一个训练周期并产出存档报告 |
+
+依赖链：
+- F4 依赖 F1：目标模板选取结果写入 F1 的 sessionConfig.goalId。
+- F3 / F5 依赖「已记录的会话数据结构」（对话历史 + 声学/情绪信号 + 评分）。
+- F5 依赖 F6（跨设备聚合）或单设备本地数据，二选一。
+- F1 / F2 / F6 相互独立，可并行。
+
+执行铁律：一功能一提示词、各自独立 session，严格按序 F1 → F2 →（F4）→ F3 → F5 → F6。
+审计与实现分离：代码复审在 fresh session 进行，不在实现 session 上续跑。
+
+### 3. 各功能技术实施方案
+
+#### F1 治疗师角色入口与会话准备台（纯前端）
+- 价值：治疗师交平板前一键设定「场景 + 目标 + 年龄档」，写入本地配置供 ChatPage 启动读取。
+- 触及文件：新增 src/lib/session.js、src/pages/TherapistEntryPage.jsx；编辑 src/App.jsx
+  （注册 /therapist）、src/pages/ChatPage.jsx（挂载读 sessionConfig）。
+- 数据模型（localStorage）：
+  xy_role："parent" | "therapist"；
+  xy_therapist_pin：PIN 的 SHA-256 哈希（Web Crypto），与家长密码分离；
+  xy_session_config：{ childId, scene, goalId, goalPlaceholders, ageBand, predictabilityTier,
+  createdBy, createdAt }。
+- 关键成功指标：/therapist 门控生效（无 PIN 不可进）；配置写入并跳转 ChatPage；ChatPage 按
+  ageBand 调字号/表情复杂度、按 scene 加载。
+- 主/备：PIN→Web Crypto，备：复用家长密码机制；路由→新增 /therapist，备：StartupPage 长按
+  Logo 隐藏入口；ChatPage→只读 config 设初始态（低风险，不耦合对话逻辑）。
+
+#### F2 课后训练记录一键归档（前端 + 可选后端）
+- 价值：已有单次 AI 报告一键套成机构训练记录格式（骨架 + 教师可填占位），导出 .md / 打印 PDF。
+- 触及文件：新增 src/lib/trainingLog.js（buildLog(report,fields)→markdown）、
+  src/components/TrainingLogPanel.jsx；编辑专业视图挂入口；（可选）编辑 backend/app.py 加
+  /api/format_log（按 §1 阶梯）。
+- 字段来源：化名/日期/时长/场景/本次目标←sessionConfig + 会话元数据；训练摘要←/api/report
+  只读引用（失败置「本次未生成 AI 摘要，可手填」）；课堂观察/干预策略/下一步建议/教师签名←占位。
+- 可选后端：POST /api/format_log，入 { messages, fields }，出 { log }；按 §1 阶梯实现；
+  不可用时前端 buildLog 静默回退。系统指令禁止新增未提供事实、禁止诊断结论与框架映射。
+- 主/备：摘要←/api/report，备：骨架+占位手填；导出 window.print，备：.md + HTML 预览；
+  正式排版←/api/format_log(additive)，备：维持 markdown 导出。
+
+#### F4 训练目标模板库（纯前端，依赖 F1）
+- 价值：治疗师在 F1 准备台从库选目标 → 写 sessionConfig.goalId + goalPlaceholders。
+- 触及文件：新增 src/data/goalTemplates.json；编辑 src/pages/TherapistEntryPage.jsx 目标下拉。
+- 数据结构：[{ id, name, description, placeholders:[{ key, label }] }]；示例目标：轮流对话、
+  主动打招呼、表达需求、情绪命名、共同注意（措辞均为「训练目标」，无诊断/量表术语）。
+- 关键成功指标：下拉读 json；选不同目标，sessionConfig.goalId + goalPlaceholders 随之变化。
+- 主/备：占位符表单，备：仅选目标名、占位符留训练记录手填。
+
+#### F3 治疗师标注与复核层（纯前端）
+- 价值：对一次【已记录】会话做时间轴回放，治疗师在专业视图加注（观察非诊断）。
+- 触及文件：新增 src/pages/SessionReviewPage.jsx；编辑 src/App.jsx（路由门控）、专业视图入口。
+- 数据模型：xy_annotations:{sessionId} → [{ t, type:'auto'|'manual', label, note, author,
+  createdAt }]；auto←已记录声学/情绪信号（只读），manual←治疗师。
+- 关键成功指标：按时间回放该次会话；manual 标注写入并持久化；仅治疗师角色可达，孩子界面零暴露。
+- 主/备：图形时间轴，备：列表式回放；auto+manual 混合，备：纯人工标注。
+
+#### F5 阶段性进度存档报告（纯前端）
+- 价值：本地多次会话聚合评分/趋势 → 趋势图 + 骨架文本 + 真实数据 → 导出 PDF。
+- 触及文件：新增 src/lib/archiveReport.js、src/components/ArchiveReportPanel.jsx；编辑专业视图
+  入口；复用既有 Recharts。
+- 核心函数：buildArchiveReport(sessions, period) → { trend, skeletonText, data }。
+- 数据源：v1 仅单设备本地数据（F5 先于 F6）；F6 就绪后被导入会话自动并入，函数签名不变。
+- 主/备：Recharts 内嵌 PDF，备：数据表 markdown + 截图；全量聚合，备：限定最近 N 次。
+
+#### F6 跨设备数据归集（导出/导入，纯前端，合规最敏感）
+- 价值：导出某儿童结构化 JSON → 另一台设备导入、校验、合并去重写 localStorage。纯文件、无服务端。
+- 触及文件：扩展现有导出 lib（或新增 src/lib/dataTransfer.js）；编辑专业视图入口。
+- 核心函数：exportChildData(childId) → { version, childAlias, sessions, trends }（不含原始录音）；
+  importChildData(file) → 校验 version/结构 + 合并去重（按 sessionId/时间戳）。
+- 合规硬约束：逐条满足 §5 第六章合规清单。
+- 主/备：按 sessionId 去重合并，备：导入即覆盖 + 明确提示；版本号向后兼容，备：不兼容拒绝导入
+  并报错，不静默损坏数据。
+
+### 4. 本轮通用硬约束（贯穿所有功能）
+- AI 角色名永远「心屿」，全项目禁止出现「暖暖」。
+- API Key 永不进前端，Flask 代理为唯一安全出口。
+- 既有 API 契约不可变更：/api/chat、/api/score、/api/report 的出入参、双 API 降级、安全过滤、
+  Prompt 注入防护，本轮一律不动。
+- 临床/评分/声学/面部/标注类数据永不进入孩子界面。
+- 仅「骨架 + 占位 + 真实数据」，无伪造临床映射、无诊断语义。
+- 遵守 ASD 友好色板与设计铁律（字面化 / 静默优先 / 可预测 / 渐进 / 安全兜底）。
+- 标准 = 正确、一致、安全、初级前端可维护，不为炫技牺牲可读性。
+- 不要自动 git commit；提交由开发者手动执行。
+
+### 5. 未成年人数据合规清单（涉导出/导入功能上线前逐条核对）
+1. 任何导出前有监护人知情同意触点（复用现有知情同意机制）。
+2. 导出数据最小化：仅训练指标 + 化名，剔除真名/联系方式/家庭信息等可识别个人信息。
+3. 导出/归集不含原始录音。
+4. 全程本地文件手动传递，不上云、不写入 URL 参数或查询串。
+5. 永久删除路径可用，并对导入的数据同样适用。
+6. 专业数据（评分/声学/面部/标注）永不进入孩子界面。
+7. 报告/模板仅骨架 + 占位 + 真实数据，无伪造临床映射、无诊断语义。
+8. 对外定位措辞统一「社交训练为主、评估为辅」，明确不替代专业诊断。
+
+### 6. 执行与验收工作流（所有功能 session 统一遵循）
+- plan-first：先读 CLAUDE.md + 汇报真实状态 + 出实施计划，等开发者回「开始」再动手。
+- 分步实施：每步带成功指标，逐步推进，不跳步。
+- 验收清单：每功能完成后逐项勾选 + 给出自测结果。
+- 提交：开发者手动 git add . && git commit；审计在 fresh session 进行。

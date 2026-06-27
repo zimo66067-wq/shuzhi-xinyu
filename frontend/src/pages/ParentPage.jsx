@@ -6,6 +6,7 @@ import ScoreTrendChart from '../components/ScoreTrendChart'
 import GoalTracker from '../components/GoalTracker'
 import { authHeader, getToken } from '../lib/parentAuth'
 import { API_BASE } from '../lib/api'
+import TrainingLogPanel from '../components/TrainingLogPanel'
 
 // 整改 A-5：纵向评分历史（本地，沿用 xinyu_ 前缀）
 const SCORE_HISTORY_KEY = 'xinyu_scoreHistory'
@@ -34,6 +35,7 @@ function ParentPage({ navigate }) {
   const [score, setScore] = useState(null)
   const [reportText, setReportText] = useState('')
   const [error, setError] = useState('')
+  const [showLogPanel, setShowLogPanel] = useState(false)
   // 整改 A-5：跨次趋势数据（家长区专用）
   const [scoreHistory, setScoreHistory] = useState(loadScoreHistory)
 
@@ -562,6 +564,16 @@ function ParentPage({ navigate }) {
             >
               本回顾为参考性启发式，非标准化量表，不可用于诊断或分级。
             </div>
+
+            {/* F2：一键生成训练记录入口（密码门控内，孩子界面零暴露） */}
+            <button
+              className="btn-primary"
+              onClick={() => setShowLogPanel(true)}
+              style={{ marginTop: '12px', width: '100%' }}
+              aria-label="生成本次机构训练记录"
+            >
+              📋 生成训练记录
+            </button>
           </section>
         )}
 
@@ -780,6 +792,14 @@ function ParentPage({ navigate }) {
           </div>
         </section>
       </div>
+
+      {/* F2：训练记录面板（密码门控内，覆盖层，孩子界面不可达） */}
+      {showLogPanel && (
+        <TrainingLogPanel
+          report={reportText}
+          onClose={() => setShowLogPanel(false)}
+        />
+      )}
     </div>
   )
 }

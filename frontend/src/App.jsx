@@ -7,6 +7,7 @@ import BreathePage from './pages/BreathePage'
 import OutsidePage from './pages/OutsidePage'
 import RestPage from './pages/RestPage'
 import ParentPage from './pages/ParentPage'
+import TherapistEntryPage from './pages/TherapistEntryPage'
 
 // 全局对话上下文：孩子信息 + 完整 messages + 网络状态
 export const ChatContext = createContext(null)
@@ -18,6 +19,7 @@ function App() {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/\/$/, '')
       if (path === '/parent') return 'parent'
+      if (path === '/therapist') return 'therapist'
     }
     return localStorage.getItem('xinyu_currentPage') || 'startup'
   })
@@ -215,6 +217,8 @@ function App() {
         return <RestPage navigate={navigate} />
       case 'parent':
         return <ParentPage navigate={navigate} />
+      case 'therapist':
+        return <TherapistEntryPage navigate={navigate} />
       default:
         return <StartupPage navigate={navigate} />
     }

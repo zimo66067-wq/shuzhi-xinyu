@@ -9,6 +9,7 @@ import FaceMetrics from '../components/FaceMetrics'
 import PasswordGate from '../components/PasswordGate'
 import { getToken } from '../lib/parentAuth'
 import { API_BASE } from '../lib/api'
+import { getSessionConfig } from '../lib/session'
 
 // 任务 1：根据心屿回复内容推断情绪表情（驱动 VRM expression）
 // 极简关键词匹配；命中多个时按优先级 happy > sad > surprised > relaxed
@@ -135,10 +136,26 @@ function ChatPage({ navigate }) {
   const [xinyuExpression, setXinyuExpression] = useState('neutral')
   const [thinkingDots, setThinkingDots] = useState('')
 
-  // 任务 3：年龄分档（low/mid/high）
-  const ageBand = useMemo(() => getAgeBand(childInfo?.age), [childInfo?.age])
+  // 任务 3 + F1：年龄分档（low/mid/high）
+  // 治疗师流：优先读 sessionConfig.ageBand；否则从 childInfo.age 推断
+  const ageBand = useMemo(
+    () => getSessionConfig()?.ageBand || getAgeBand(childInfo?.age),
+    [childInfo?.age],
+  )
   // 10+ 岁的扩展表情面板开关
   const [emojiExpanded, setEmojiExpanded] = useState(false)
+
+  // F1：首次挂载时，若 sessionConfig 含场景且本次 session 尚未应用，则自动切入
+  useEffect(() => {
+    const cfg = getSessionConfig()
+    if (!cfg) return
+    if (sessionStorage.getItem('xy_session_applied')) return
+    sessionStorage.setItem('xy_session_applied', '1')
+    if (cfg.scene === 'supermarket') {
+      setScenario('supermarket')
+      setCurrentScene('enter')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 任务 3：根据 ageBand 设置全局 CSS 变量，离开页面时还原
   useEffect(() => {

@@ -28,6 +28,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from ai_service import chat, score, report
+from llm_client import call_llm, FALLBACK_REPLY
 import tts_service
 import stt_service
 
@@ -367,6 +368,67 @@ def api_report():
     level = data.get("level")
     result = report(score_data, previous_score=previous_score, level=level)
     return jsonify(result)
+
+
+# ── POST /api/format_log（F2，阶梯①）────────────────────────────────────────
+
+# 系统指令内联常量：严格约束输出，禁止生成未提供事实、诊断结论、临床映射
+_FORMAT_LOG_SYSTEM = (
+    "你是机构社交训练记录整理助手。\n"
+    "规则（不可违反）：\n"
+    "1. 只整理已提供的 AI 摘要与教师填写字段，输出更正式、流畅的中文训练记录正文。\n"
+    "2. 禁止新增任何未提供的事实、数据或分数；禁止编造课堂内容。\n"
+    "3. 禁止任何诊断结论、障碍描述；禁止映射 DSM-5、ABA、标准化量表。\n"
+    "4. 产品定位：社交训练为主、评估为辅，绝不替代专业诊断。\n"
+    "5. 只输出训练记录正文，不加解释、前言或结束语。"
+)
+
+
+@app.route("/api/format_log", methods=["POST"])
+@limiter.limit("10 per minute")
+def api_format_log():
+    """
+    训练记录正式排版（F2 可选增强）。
+
+    请求 JSON：
+      {
+        "ai_summary": "<来自 /api/report 的摘要文本>",
+        "fields": {
+          "childAlias": "...", "date": "...", "duration": "...",
+          "observation": "...", "intervention": "...",
+          "nextStep": "...", "teacherName": "..."
+        }
+      }
+
+    响应 JSON：
+      { "log": "<整理后的正式训练记录正文>" }
+
+    安全：家长鉴权必须通过；字段长度截断防止 token 滥用；系统指令禁止诊断语义。
+    """
+    _require_parent_auth()
+
+    data = request.get_json(silent=True) or {}
+    ai_summary = str(data.get("ai_summary") or "").strip()[:1500]
+    fields = data.get("fields") or {}
+    if not isinstance(fields, dict):
+        fields = {}
+
+    # 字段截断（每字段 ≤ 300 字符，字段数 ≤ 10 个）
+    safe_fields = {
+        str(k)[:30]: str(v)[:300]
+        for k, v in list(fields.items())[:10]
+    }
+    fields_text = "\n".join(f"{k}：{v}" for k, v in safe_fields.items() if v.strip())
+
+    user_content = f"AI摘要：\n{ai_summary or '（无 AI 摘要）'}\n\n教师填写：\n{fields_text or '（无）'}"
+
+    raw = call_llm(_FORMAT_LOG_SYSTEM, [{"role": "user", "content": user_content}])
+
+    # 兜底字符串检测：call_llm 失败时返回 FALLBACK_REPLY，前端收到 500 后静默回退
+    if not raw or raw.strip() == FALLBACK_REPLY.strip():
+        return jsonify({"error": "format_log failed"}), 500
+
+    return jsonify({"log": raw})
 
 
 # ── POST /api/tts ─────────────────────────────────────────────────────────
