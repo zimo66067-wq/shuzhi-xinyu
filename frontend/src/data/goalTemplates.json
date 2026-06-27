@@ -1,0 +1,42 @@
+[
+  {
+    "id": "turn_taking",
+    "name": "轮流对话",
+    "description": "练习等待对方说完再发言，体验一来一往的对话节奏",
+    "placeholders": [
+      { "key": "turns", "label": "目标轮次（次）" }
+    ]
+  },
+  {
+    "id": "greeting",
+    "name": "主动打招呼",
+    "description": "练习主动向熟悉或不熟悉的人问好，建立对话开场",
+    "placeholders": [
+      { "key": "greetCount", "label": "目标打招呼次数" }
+    ]
+  },
+  {
+    "id": "express_need",
+    "name": "表达需求",
+    "description": "用语言清楚说出自己想要的东西或想做的事",
+    "placeholders": [
+      { "key": "needType", "label": "本次练习的需求类型" }
+    ]
+  },
+  {
+    "id": "emotion_naming",
+    "name": "情绪命名",
+    "description": "识别并用词语描述自己或他人当下的情绪状态",
+    "placeholders": [
+      { "key": "emotions", "label": "本次涉及的情绪词（逗号分隔）" }
+    ]
+  },
+  {
+    "id": "joint_attention",
+    "name": "共同注意",
+    "description": "练习与对话伙伴共同关注同一事物并交流感受",
+    "placeholders": [
+      { "key": "topic", "label": "共同注意的话题或物品" }
+    ]
+  }
+]
