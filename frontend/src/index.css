@@ -1093,3 +1093,283 @@ h2 {
   animation-duration: 8s !important;
   animation-iteration-count: infinite !important;
 }
+
+/* ============================================
+   响应式适配：桌面侧边栏布局（≥768px）
+   移动端保持原样，不触碰任何既有移动端样式。
+   ============================================ */
+
+/* ── CSS 变量补全 ── */
+:root {
+  --card-border: rgba(168, 155, 138, 0.2);
+}
+
+/* ── app-shell：外层 flex 容器（移动端为列，桌面端为行） ── */
+.app-shell {
+  display: flex;
+  flex-direction: column;   /* 移动端：竖排，与原 height:100% flex-column 一致 */
+  height: 100%;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ── app-main：页面内容区（含 offline-banner + page-wrapper） ── */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── page-wrapper：renderPage() 的宿主，移动端全宽铺满 ── */
+.page-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── 移动端：侧边栏不显示 ── */
+.app-sidebar {
+  display: none;
+}
+
+/* ============================================================
+   桌面端 ≥768px：显示侧边栏，主内容居中
+   ============================================================ */
+@media (min-width: 768px) {
+
+  /* 停止 body 居中（宽屏不再需要把 #root 置于正中） */
+  body {
+    justify-content: flex-start;
+  }
+
+  /* #root 扩展为全宽，固定高度防止双滚动条 */
+  #root {
+    max-width: 100%;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* app-shell 在桌面改为横排 */
+  .app-shell {
+    flex-direction: row;
+    height: 100vh;
+  }
+
+  /* 显示侧边栏 */
+  .app-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    height: 100vh;
+    background-color: #F0EBE3;
+    border-right: 1px solid var(--card-border);
+    overflow: hidden;
+    transition: width 0.22s ease;
+  }
+
+  /* 主区域：剩余空间，横向居中内容列 */
+  .app-main {
+    align-items: center;
+    background-color: var(--bg-main);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* 内容列：限制宽度，撑满高度 */
+  .page-wrapper {
+    width: 100%;
+    max-width: 480px;
+    height: 100%;
+    flex: 1;
+  }
+
+  /* 覆盖各页面的 height:100vh → height:100%，适配 flex 容器 */
+  .page-container {
+    height: 100%;
+  }
+}
+
+/* ============================================================
+   侧边栏内部样式
+   （移动端 .app-sidebar 为 display:none，这些样式不生效）
+   ============================================================ */
+
+/* 顶栏：品牌名 + 折叠按钮 */
+.sb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 10px 10px;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.sb-brand {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 1;
+}
+
+.sb-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: rgba(168, 155, 138, 0.13);
+  color: var(--text-sub);
+  font-size: 17px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background-color 0.18s;
+}
+.sb-toggle:hover {
+  background-color: var(--accent);
+  color: #7B4A4A;
+}
+
+/* 新建对话区 */
+.sb-section {
+  padding: 0 8px 8px;
+  flex-shrink: 0;
+}
+
+.sb-new-chat {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background-color: var(--accent);
+  color: #7B4A4A;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.sb-new-chat.collapsed {
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+}
+.sb-new-chat:hover { opacity: 0.82; }
+
+/* 主导航 */
+.sb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.sb-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-main);
+  text-align: left;
+  transition: background-color 0.15s;
+  white-space: nowrap;
+}
+.sb-nav-item:hover {
+  background-color: rgba(255, 212, 212, 0.38);
+}
+.sb-nav-item.active {
+  background-color: var(--accent);
+  color: #7B4A4A;
+  font-weight: 600;
+}
+
+.sb-item-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+  line-height: 1;
+}
+
+.sb-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 历次对话区 */
+.sb-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+}
+.sb-history::-webkit-scrollbar { width: 3px; }
+.sb-history::-webkit-scrollbar-thumb {
+  background-color: var(--halo);
+  border-radius: 2px;
+}
+
+.sb-section-title {
+  font-size: 10px;
+  color: var(--text-sub);
+  letter-spacing: 0.07em;
+  padding: 10px 4px 5px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.sb-history-empty {
+  font-size: 12px;
+  color: var(--text-sub);
+  text-align: center;
+  padding: 10px 0;
+}
+
+.sb-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sb-history-item {
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: default;
+  transition: background-color 0.15s;
+}
+.sb-history-item:hover {
+  background-color: rgba(255, 212, 212, 0.22);
+}
+
+.sb-history-meta {
+  font-size: 10px;
+  color: var(--text-sub);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-history-preview {
+  font-size: 12px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

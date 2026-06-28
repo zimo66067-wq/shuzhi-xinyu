@@ -1,4 +1,6 @@
 import { useState, useEffect, createContext } from 'react'
+import AppSidebar from './components/AppSidebar'
+import { saveSession } from './lib/sessionHistory'
 import StartupPage from './pages/StartupPage'
 import ChatPage from './pages/ChatPage'
 import ToolboxPage from './pages/ToolboxPage'
@@ -172,6 +174,10 @@ function App() {
   const [showRecovered, setShowRecovered] = useState(false)
 
   const navigate = (page) => {
+    // 离开对话页时保存本次会话摘要到侧边栏历史
+    if (currentPage === 'chat' && page !== 'chat' && childInfo && messages.length > 0) {
+      saveSession(childInfo.name, messages)
+    }
     setCurrentPage(page)
     localStorage.setItem('xinyu_currentPage', page)
   }
@@ -253,17 +259,20 @@ function App() {
         wipeAllData,
       }}
     >
-      <div
-        className={settings.animations ? undefined : 'reduce-motion'}
-        style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-      >
-        {!isOnline && (
-          <div className="offline-banner">网络断开了，心屿等你回来 🌙</div>
-        )}
-        {isOnline && showRecovered && (
-          <div className="offline-banner recovered">网络恢复啦！</div>
-        )}
-        {renderPage()}
+      {/* app-shell：桌面端 flex-row（侧边栏 + 主区），移动端退化为 flex-column */}
+      <div className={`app-shell${settings.animations ? '' : ' reduce-motion'}`}>
+        <AppSidebar navigate={navigate} currentPage={currentPage} />
+        <div className="app-main">
+          {!isOnline && (
+            <div className="offline-banner">网络断开了，心屿等你回来 🌙</div>
+          )}
+          {isOnline && showRecovered && (
+            <div className="offline-banner recovered">网络恢复啦！</div>
+          )}
+          <div className="page-wrapper">
+            {renderPage()}
+          </div>
+        </div>
       </div>
     </ChatContext.Provider>
   )
