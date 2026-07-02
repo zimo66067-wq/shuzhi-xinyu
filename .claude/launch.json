@@ -6,6 +6,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
+      "autoPort": false,
       "cwd": "frontend"
     },
     {
@@ -14,6 +15,13 @@
       "runtimeArgs": ["-X", "utf8", "app.py"],
       "port": 5000,
       "cwd": "backend"
+    }
+  ,{
+      "name": "apology",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "8080", "."],
+      "port": 8080,
+      "cwd": "apology-backend"
     }
   ]
 }

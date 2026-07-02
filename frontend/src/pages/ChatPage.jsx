@@ -186,6 +186,7 @@ function ChatPage({ navigate }) {
   const [showComfort, setShowComfort] = useState(false)
 
   const historyEndRef = useRef(null)
+  const chatPanelRef = useRef(null)   // 桌面端右列消息面板容器
   const isThinking = xinyuState === 'thinking'
 
   // 声学异常实时回调（cry / silence / agitated）
@@ -316,6 +317,13 @@ function ChatPage({ navigate }) {
       }, 320)
     }
   }, [historyOpen, messages])
+
+  // 桌面端消息面板：新消息到达时自动滚到底部
+  useEffect(() => {
+    if (chatPanelRef.current) {
+      chatPanelRef.current.scrollTop = chatPanelRef.current.scrollHeight
+    }
+  }, [messages])
 
   // 离开页面取消 TTS
   useEffect(() => () => cancelTTS(), [])
@@ -575,125 +583,232 @@ function ChatPage({ navigate }) {
         </div>
       </div>
 
-      {/* Q3 决策：自由聊天模式下隐藏 TrainingStepper，避免孩子看到"训练/阶段"措辞 */}
-      {/* 场景模式仍保留场景横幅（演示场景训练亮点用） */}
-      {scenario && (
-        <ScenarioBanner
-          scenario={scenario}
-          currentScene={currentScene}
-          onExit={() => {
-            setScenario(null)
-            setCurrentScene(null)
-          }}
-        />
-      )}
+      {/* 主体：移动端竖排，桌面端左右两列 */}
+      <div className="chat-body">
 
-      {/* 安抚提示条（整改 A-3：醒目"叫大人"按钮，危机指向真实成人） */}
-      {showComfort && (
-        <div className="comfort-banner" role="dialog" aria-label="温和提示">
-          {calledAdult ? (
-            <>
-              <div className="comfort-banner-text">
-                我们一起等大人来，好吗？🌿
-              </div>
-              <div className="comfort-banner-actions">
-                <button
-                  className="primary"
-                  onClick={() => {
-                    setShowComfort(false)
-                    setComfortHits(0)
-                    setCalledAdult(false)
-                  }}
-                >
-                  好
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="comfort-banner-text">
-                心屿发现你可能需要休息一下。如果不舒服，按下面的按钮叫大人来。🌿
-              </div>
-              {/* 第一优先：叫真实成人 */}
-              <button
-                className="btn-call-adult"
-                onClick={callAdult}
-                aria-label="按这里叫大人来"
-              >
-                🔔 按这里叫大人来
-              </button>
-              <div className="comfort-banner-actions">
-                <button
-                  onClick={() => {
-                    setShowComfort(false)
-                    setComfortHits(0)
-                  }}
-                >
-                  继续聊天
-                </button>
-                <button
-                  className="primary"
-                  onClick={() => {
-                    setShowComfort(false)
-                    setComfortHits(0)
-                    navigate('toolbox')
-                  }}
-                >
-                  去看看
-                </button>
-              </div>
-            </>
+        {/* 左列 / 移动端主区：3D 角色 + 场景横幅 + 安抚横幅 */}
+        <div className="chat-col-avatar">
+          {scenario && (
+            <ScenarioBanner
+              scenario={scenario}
+              currentScene={currentScene}
+              onExit={() => {
+                setScenario(null)
+                setCurrentScene(null)
+              }}
+            />
           )}
-        </div>
-      )}
 
-      {/* 中央 3D 区域（扩展占满中部，原 chat-history 改为侧边栏） */}
-      <div className="avatar-zone" style={{ flex: 1, height: 'auto' }}>
-        <div className={`avatar-halo ${isThinking ? 'thinking' : ''}`}>
-          <XinyuScene
-            state={xinyuState}
-            volume={audioState.volume}
-            lowBand={audioState.lowBand}
-            midBand={audioState.midBand}
-            highBand={audioState.highBand}
-            expression={xinyuExpression}
-            reduceMotion={reduceMotion}
-          />
-        </div>
+          {showComfort && (
+            <div className="comfort-banner" role="dialog" aria-label="温和提示">
+              {calledAdult ? (
+                <>
+                  <div className="comfort-banner-text">
+                    我们一起等大人来，好吗？🌿
+                  </div>
+                  <div className="comfort-banner-actions">
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        setShowComfort(false)
+                        setComfortHits(0)
+                        setCalledAdult(false)
+                      }}
+                    >
+                      好
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="comfort-banner-text">
+                    心屿发现你可能需要休息一下。如果不舒服，按下面的按钮叫大人来。🌿
+                  </div>
+                  <button
+                    className="btn-call-adult"
+                    onClick={callAdult}
+                    aria-label="按这里叫大人来"
+                  >
+                    🔔 按这里叫大人来
+                  </button>
+                  <div className="comfort-banner-actions">
+                    <button
+                      onClick={() => {
+                        setShowComfort(false)
+                        setComfortHits(0)
+                      }}
+                    >
+                      继续聊天
+                    </button>
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        setShowComfort(false)
+                        setComfortHits(0)
+                        navigate('toolbox')
+                      }}
+                    >
+                      去看看
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-        {/* dev 模式：右上角浮动条显示实时口型输入（生产构建会被 esbuild drop console 顺带剔除） */}
-        {import.meta.env.DEV && xinyuState === 'speaking' && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '8px',
-              right: '12px',
-              background: 'rgba(0,0,0,0.55)',
-              color: '#fff',
-              fontSize: '10px',
-              fontFamily: 'monospace',
-              padding: '6px 8px',
-              borderRadius: '6px',
-              lineHeight: 1.4,
-              pointerEvents: 'none',
-            }}
-          >
-            <div>vol&nbsp;{audioState.volume.toFixed(2)}</div>
-            <div>lo&nbsp;&nbsp;{audioState.lowBand.toFixed(2)}</div>
-            <div>mid&nbsp;{audioState.midBand.toFixed(2)}</div>
-            <div>hi&nbsp;&nbsp;{audioState.highBand.toFixed(2)}</div>
+          <div className="avatar-zone" style={{ flex: 1, height: 'auto' }}>
+            <div className={`avatar-halo ${isThinking ? 'thinking' : ''}`}>
+              <XinyuScene
+                state={xinyuState}
+                volume={audioState.volume}
+                lowBand={audioState.lowBand}
+                midBand={audioState.midBand}
+                highBand={audioState.highBand}
+                expression={xinyuExpression}
+                reduceMotion={reduceMotion}
+              />
+            </div>
+            {import.meta.env.DEV && xinyuState === 'speaking' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '12px',
+                  background: 'rgba(0,0,0,0.55)',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontFamily: 'monospace',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  lineHeight: 1.4,
+                  pointerEvents: 'none',
+                }}
+              >
+                <div>vol&nbsp;{audioState.volume.toFixed(2)}</div>
+                <div>lo&nbsp;&nbsp;{audioState.lowBand.toFixed(2)}</div>
+                <div>mid&nbsp;{audioState.midBand.toFixed(2)}</div>
+                <div>hi&nbsp;&nbsp;{audioState.highBand.toFixed(2)}</div>
+              </div>
+            )}
+            <div
+              className="subtitle-overlay"
+              style={{ opacity: ttsSubtitle || isThinking ? 1 : 0 }}
+            >
+              {isThinking ? `心屿在想${thinkingDots}` : ttsSubtitle}
+            </div>
           </div>
-        )}
-
-        <div
-          className="subtitle-overlay"
-          style={{ opacity: ttsSubtitle || isThinking ? 1 : 0 }}
-        >
-          {isThinking ? `心屿在想${thinkingDots}` : ttsSubtitle}
         </div>
+
+        {/* 右列（桌面端）/ 底部（移动端）：消息流 + 输入栏 */}
+        <div className="chat-col-panel">
+
+          {/* 桌面端持久消息列表（移动端 display:none，移动端走 drawer） */}
+          <div className="chat-msg-panel" ref={chatPanelRef}>
+            {visibleMessages.length === 0 ? (
+              <div className="chat-msg-empty">和心屿聊点什么吧 🌸</div>
+            ) : (
+              visibleMessages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`msg-row ${m.role === 'user' ? 'user' : 'xinyu'}`}
+                >
+                  <div
+                    className={`msg-bubble ${m.role === 'user' ? 'user' : 'xinyu'}`}
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 输入栏（移动端和桌面端均显示） */}
+          <div className="bottom-bar-new">
+            <div className="emoji-compact">
+              {emojiList.map((item, idx) => (
+                <span
+                  key={`${item.label}-${idx}`}
+                  className="emoji-mini"
+                  onClick={() => isOnline && sendMessage(item.text)}
+                  role="button"
+                  aria-label={`表达：${item.label}`}
+                >
+                  {item.icon}
+                </span>
+              ))}
+              {ageBand === 'high' && (
+                <span
+                  className="emoji-mini"
+                  onClick={() => setEmojiExpanded((v) => !v)}
+                  role="button"
+                  aria-label={emojiExpanded ? '收起更多表情' : '更多表情'}
+                  title={emojiExpanded ? '收起' : '更多'}
+                >
+                  {emojiExpanded ? '−' : '＋'}
+                </span>
+              )}
+              <span
+                className="emoji-mini"
+                onClick={() => navigate('toolbox')}
+                role="button"
+                aria-label="工具盒"
+                title="工具盒"
+              >
+                🎈
+              </span>
+            </div>
+
+            <div className="input-row-inline">
+              <button
+                className={`btn-mic ${isRecording ? 'recording' : ''}`}
+                {...micHandlers}
+                disabled={micUnavailable || isTranscribing || !isOnline}
+                style={{ touchAction: tapMode ? 'manipulation' : 'none' }}
+                title={
+                  micDenied
+                    ? '麦克风权限被拒，请用打字'
+                    : !sttSupported
+                    ? '浏览器不支持麦克风'
+                    : !isOnline
+                    ? '网络断开'
+                    : tapMode
+                    ? isRecording
+                      ? '点一下停止'
+                      : '点一下说话'
+                    : '按住说话'
+                }
+                aria-label={
+                  tapMode ? (isRecording ? '点一下停止' : '点一下说话') : '按住说话'
+                }
+              >
+                {isTranscribing ? '⏳' : '🎤'}
+              </button>
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isOnline) sendByInput()
+                }}
+                placeholder={isOnline ? '输入文字...' : '网络断开'}
+                disabled={!isOnline}
+                aria-label="输入对话文字"
+              />
+              <button
+                className="btn-send-inline"
+                onClick={sendByInput}
+                disabled={!inputText.trim() || !isOnline}
+                aria-label="发送"
+              >
+                ➤
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      {/* 历史抽屉 */}
+      {/* 历史抽屉（移动端用） */}
       {historyOpen && (
         <>
           <div
@@ -752,90 +867,6 @@ function ChatPage({ navigate }) {
           </div>
         </>
       )}
-
-      {/* 底部并列输入栏 */}
-      <div className="bottom-bar-new">
-        <div className="emoji-compact">
-          {emojiList.map((item, idx) => (
-            <span
-              key={`${item.label}-${idx}`}
-              className="emoji-mini"
-              onClick={() => isOnline && sendMessage(item.text)}
-              role="button"
-              aria-label={`表达：${item.label}`}
-            >
-              {item.icon}
-            </span>
-          ))}
-          {/* 10+ 岁：扩展表情入口 */}
-          {ageBand === 'high' && (
-            <span
-              className="emoji-mini"
-              onClick={() => setEmojiExpanded((v) => !v)}
-              role="button"
-              aria-label={emojiExpanded ? '收起更多表情' : '更多表情'}
-              title={emojiExpanded ? '收起' : '更多'}
-            >
-              {emojiExpanded ? '−' : '＋'}
-            </span>
-          )}
-          <span
-            className="emoji-mini"
-            onClick={() => navigate('toolbox')}
-            role="button"
-            aria-label="工具盒"
-            title="工具盒"
-          >
-            🎈
-          </span>
-        </div>
-
-        <div className="input-row-inline">
-          <button
-            className={`btn-mic ${isRecording ? 'recording' : ''}`}
-            {...micHandlers}
-            disabled={micUnavailable || isTranscribing || !isOnline}
-            style={{ touchAction: tapMode ? 'manipulation' : 'none' }}
-            title={
-              micDenied
-                ? '麦克风权限被拒，请用打字'
-                : !sttSupported
-                ? '浏览器不支持麦克风'
-                : !isOnline
-                ? '网络断开'
-                : tapMode
-                ? isRecording
-                  ? '点一下停止'
-                  : '点一下说话'
-                : '按住说话'
-            }
-            aria-label={
-              tapMode ? (isRecording ? '点一下停止' : '点一下说话') : '按住说话'
-            }
-          >
-            {isTranscribing ? '⏳' : '🎤'}
-          </button>
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && isOnline) sendByInput()
-            }}
-            placeholder={isOnline ? '输入文字...' : '网络断开'}
-            disabled={!isOnline}
-            aria-label="输入对话文字"
-          />
-          <button
-            className="btn-send-inline"
-            onClick={sendByInput}
-            disabled={!inputText.trim() || !isOnline}
-            aria-label="发送"
-          >
-            ➤
-          </button>
-        </div>
-      </div>
 
       {/* 任务 5（Q5）：依恋护栏柔和提示 —— 建议去找真实朋友玩 */}
       {showAttachmentNudge && (

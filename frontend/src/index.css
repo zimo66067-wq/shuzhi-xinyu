@@ -1171,18 +1171,18 @@ h2 {
     transition: width 0.22s ease;
   }
 
-  /* 主区域：剩余空间，横向居中内容列 */
+  /* 主区域：剩余空间，内容列拉伸填满 */
   .app-main {
-    align-items: center;
+    align-items: stretch;
     background-color: var(--bg-main);
     height: 100vh;
     overflow: hidden;
   }
 
-  /* 内容列：限制宽度，撑满高度 */
+  /* 内容列：不限宽，撑满高度 */
   .page-wrapper {
     width: 100%;
-    max-width: 480px;
+    max-width: none;
     height: 100%;
     flex: 1;
   }
@@ -1372,4 +1372,128 @@ h2 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ============================================================
+   ChatPage 两列布局（桌面端左：3D角色  右：消息+输入）
+   移动端：单列竖排，历史走 drawer
+   ============================================================ */
+
+/* 移动端：竖向容器 */
+.chat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 左列（移动端为上方主区）：3D 角色 + 横幅 */
+.chat-col-avatar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+/* 右列（移动端为底部栏）：消息面板 + 输入栏 */
+.chat-col-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* 桌面消息面板：移动端隐藏（历史走 drawer） */
+.chat-msg-panel {
+  display: none;
+}
+
+.chat-msg-empty {
+  color: var(--text-sub);
+  font-size: 14px;
+  text-align: center;
+  padding: 48px 20px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 768px) {
+  /* 桌面端两列横排 */
+  .chat-body {
+    flex-direction: row;
+    height: 100%;
+  }
+
+  /* 左列：avatar 区，占 45% 宽 */
+  .chat-col-avatar {
+    flex: 0 0 45%;
+    max-width: 45%;
+    border-right: 1px solid var(--card-border);
+    background: linear-gradient(160deg, #FFF5E6 0%, #FFF0F5 100%);
+  }
+
+  /* 右列：消息 + 输入，占剩余空间 */
+  .chat-col-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 1;
+    background: var(--bg-main);
+  }
+
+  /* 桌面消息面板 */
+  .chat-msg-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    gap: 10px;
+    scroll-behavior: smooth;
+  }
+  .chat-msg-panel::-webkit-scrollbar { width: 4px; }
+  .chat-msg-panel::-webkit-scrollbar-thumb {
+    background: var(--halo);
+    border-radius: 2px;
+  }
+
+  /* 桌面 avatar 光环放大 */
+  /* 桌面 avatar 光环：放大到左列宽度约 3/4，aspect-ratio:1 维持正圆 */
+  .avatar-halo {
+    width: 75% !important;
+    height: auto !important;
+  }
+
+  /* 桌面顶栏：增加内边距，让按钮宽松 */
+  .top-bar-new {
+    padding: 0 24px;
+    height: 58px;
+    gap: 10px;
+  }
+
+  /* 桌面底栏：与右列贴合 */
+  .bottom-bar-new {
+    border-top: 1px solid var(--card-border);
+    padding: 14px 20px;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  /* 桌面输入行：输入框更宽 */
+  .input-row-inline input[type="text"] {
+    font-size: 15px;
+  }
+
+  /* 桌面 emoji 栏字号 */
+  .emoji-compact {
+    gap: 8px;
+  }
+  .emoji-mini {
+    font-size: 22px;
+  }
 }
