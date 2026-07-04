@@ -1,0 +1,47 @@
+# Render Blueprint for the main shuzhi-xinyu repository.
+# Dashboard path: Render -> New -> Blueprint -> connect zimo66067-wq/shuzhi-xinyu.
+
+services:
+  - type: web
+    name: shuzhi-xinyu-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --worker-class sync --workers 2 --timeout 60 --log-level $GUNICORN_LOG_LEVEL
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: TENCENT_SECRET_ID
+        sync: false
+      - key: TENCENT_SECRET_KEY
+        sync: false
+      - key: PARENT_PASSWORD
+        sync: false
+      - key: PARENT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173
+      - key: GUNICORN_LOG_LEVEL
+        value: warning
+
+  # Optional analytics/tracking API. This is a separate Git repository, not a
+  # normal child folder in shuzhi-xinyu, so the service points at its own repo.
+  - type: web
+    name: shuzhi-xinyu-track
+    runtime: python
+    repo: https://github.com/zimo66067-wq/apology.git
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    envVars:
+      - key: ADMIN_KEY
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite:///./visits.db

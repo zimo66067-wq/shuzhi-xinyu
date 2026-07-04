@@ -43,6 +43,8 @@ build/
 *.fbx
 *.blend
 *.blend1
+# 例外：前端部署所需的模型文件必须入库（Vercel 构建时会用到）
+!frontend/public/models/*.vrm
 
 # ---- MediaPipe 资源（wasm + 模型，约 35MB，本地托管不入库）----
 frontend/public/mediapipe/
@@ -92,4 +94,7 @@ npm-debug.log*
 Untitled-*.py
 Untitled-*.txt
 Untitled-*.html
+
+# ---- WorkBuddy 项目管理数据（不入库） ----
+.workbuddy/
 
