@@ -1,47 +1,108 @@
-# Render Blueprint for the main shuzhi-xinyu repository.
-# Dashboard path: Render -> New -> Blueprint -> connect zimo66067-wq/shuzhi-xinyu.
+# =============================================================================
+# 数智心屿 · Render Blueprint 部署配置
+# =============================================================================
+# 使用方法：
+#   1. 登录 Render Dashboard → New → Blueprint
+#   2. 连接 GitHub 仓库 zimo66067-wq/shuzhi-xinyu
+#   3. Render 自动读取本文件创建所有服务
+#
+# 重要：首次部署后，必须将 Vercel 实际域名回填到 CORS_ORIGINS 中！
+# =============================================================================
 
 services:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 主后端 Flask API 服务
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   - type: web
     name: shuzhi-xinyu-api
     runtime: python
     region: singapore
     plan: free
     rootDir: backend
+
+    # ── 构建与启动 ──────────────────────────────────────────────
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --worker-class sync --workers 2 --timeout 60 --log-level $GUNICORN_LOG_LEVEL
+    startCommand: >-
+      gunicorn app:app
+      --bind 0.0.0.0:$PORT
+      --worker-class sync
+      --workers 2
+      --timeout 60
+      --log-level $GUNICORN_LOG_LEVEL
+      --access-logfile -
+
+    # ── 自动部署与健康检查 ──────────────────────────────────────
     autoDeployTrigger: commit
     healthCheckPath: /api/health
+
+    # ── 环境变量 ────────────────────────────────────────────────
     envVars:
+      # === 必须配置（sync: false 表示不会从 Blueprint 同步，需在 Dashboard 手动填写）===
       - key: DEEPSEEK_API_KEY
         sync: false
+        # 从 https://platform.deepseek.com/api_keys 获取
+
       - key: TENCENT_SECRET_ID
         sync: false
+        # 腾讯云 CAM 访问密钥 ID（用于 TTS + ASR）
+
       - key: TENCENT_SECRET_KEY
         sync: false
+        # 腾讯云 CAM 访问密钥 Key
+
       - key: PARENT_PASSWORD
         sync: false
+        # 家长后台密码（生产环境务必使用强密码！）
+
       - key: PARENT_SECRET
         generateValue: true
+        # Token 签名密钥，Blueprint 会自动生成 32 字节随机值
+        # 手动部署时：python -c "import secrets; print(secrets.token_hex(32))"
+
+      # === 推荐配置（根据实际域名修改）===
       - key: CORS_ORIGINS
-        value: http://localhost:5173,http://127.0.0.1:5173
+        value: "https://<YOUR-VERCEL-DOMAIN>.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
+        # ⚠️ 部署后把 <YOUR-VERCEL-DOMAIN> 替换为 Vercel 分配的实际域名
+        # 例如：CORS_ORIGINS=https://shuzhi-xinyu.vercel.app,http://localhost:5173
+
+      # === 服务器配置 ===
       - key: GUNICORN_LOG_LEVEL
         value: warning
+        # Render 免费实例日志有配额限制，建议生产用 warning
 
-  # Optional analytics/tracking API. This is a separate Git repository, not a
-  # normal child folder in shuzhi-xinyu, so the service points at its own repo.
+      - key: FLASK_MAX_CONTENT_LENGTH
+        value: "8388608"
+        # 8MB — STT 语音识别端点需要接收音频文件
+        # 本地开发默认 1MB，Render 放开到 8MB
+
+      # Render 自动注入 PORT，不要手动设置
+      # FLASK_HOST / FLASK_DEBUG 不需要设置（gunicorn 自动处理）
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 访问追踪 FastAPI 服务（可选，独立仓库）
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   - type: web
     name: shuzhi-xinyu-track
     runtime: python
     repo: https://github.com/zimo66067-wq/apology.git
     region: singapore
     plan: free
+    rootDir: .
+
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+
     autoDeployTrigger: commit
     healthCheckPath: /api/health
+
     envVars:
       - key: ADMIN_KEY
         sync: false
+        # 管理后台密钥
+
       - key: DATABASE_URL
         value: sqlite:///./visits.db
+        # ⚠️ SQLite 在 Render 免费实例上不可靠（重启/休眠/重新部署后丢失）
+        # 需要长期保留数据时，改为免费 Postgres 连接串：
+        # 例如 Supabase: postgresql://user:pass@host:5432/db
+        # 或 Neon.tech: postgresql://user:pass@host:5432/db?sslmode=require

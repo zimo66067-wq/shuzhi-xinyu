@@ -1348,13 +1348,26 @@ h2 {
 }
 
 .sb-history-item {
+  display: block;
+  width: 100%;
   padding: 7px 8px;
+  border: 0;
   border-radius: 8px;
-  cursor: default;
-  transition: background-color 0.15s;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
 }
 .sb-history-item:hover {
   background-color: rgba(255, 212, 212, 0.22);
+}
+.sb-history-item:focus-visible {
+  outline: 2px solid var(--halo);
+  outline-offset: 2px;
+}
+.sb-history-item.legacy {
+  cursor: help;
+  opacity: 0.68;
 }
 
 .sb-history-meta {

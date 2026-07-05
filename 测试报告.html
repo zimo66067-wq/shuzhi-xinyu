@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数智心屿 · 项目测试报告</title>
+<style>
+:root {
+  --pass: #10b981;
+  --fail: #ef4444;
+  --skip: #f59e0b;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --accent: #4a90d9;
+  --accent-light: #e8f0fe;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  padding: 0;
+}
+.header {
+  background: linear-gradient(135deg, #4a90d9, #7ec8e3);
+  color: white;
+  padding: 48px 32px;
+  text-align: center;
+}
+.header h1 { font-size: 28px; margin-bottom: 8px; font-weight: 700; }
+.header p { font-size: 15px; opacity: 0.9; }
+.header .meta { margin-top: 16px; font-size: 13px; opacity: 0.8; }
+.container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+
+/* Summary Cards */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.summary-card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  text-align: center;
+  transition: transform 0.2s;
+}
+.summary-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.summary-card .number { font-size: 36px; font-weight: 800; line-height: 1.2; }
+.summary-card .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.summary-card.pass .number { color: var(--pass); }
+.summary-card.fail .number { color: var(--fail); }
+.summary-card.total .number { color: var(--accent); }
+
+/* Section */
+.section {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.section h2 {
+  font-size: 18px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 20px;
+}
+.badge.pass { background: #d1fae5; color: #065f46; }
+.badge.fail { background: #fee2e2; color: #991b1b; }
+
+/* Test Table */
+.test-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.test-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.test-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.test-table tr:last-child td { border-bottom: none; }
+.test-table .icon { width: 24px; text-align: center; font-weight: 700; }
+.test-table .icon.pass { color: var(--pass); }
+.test-table .icon.fail { color: var(--fail); }
+.test-table .detail { color: var(--muted); font-size: 12px; font-family: "Consolas", "Monaco", monospace; }
+
+/* Project Info */
+.info-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 16px;
+  font-size: 14px;
+}
+.info-grid dt { color: var(--muted); font-weight: 500; }
+.info-grid dd { color: var(--text); }
+.tech-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.tech-tag {
+  font-size: 12px;
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Progress bar */
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+.progress-bar .fill {
+  height: 100%;
+  background: var(--pass);
+  border-radius: 4px;
+  transition: width 0.5s;
+}
+
+.footer {
+  text-align: center;
+  padding: 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>数智心屿 · 项目代码与测试报告</h1>
+  <p>AI 数字人社交练习陪伴工具 — 全栈测试结果</p>
+  <div class="meta">测试时间：2026-07-04 00:20 · 测试环境：Windows · Python 3.13 · Node 22</div>
+</div>
+
+<div class="container">
+
+  <!-- Overall Summary -->
+  <div class="summary-grid">
+    <div class="summary-card total">
+      <div class="number">45</div>
+      <div class="label">测试用例总数</div>
+    </div>
+    <div class="summary-card pass">
+      <div class="number">45</div>
+      <div class="label">通过</div>
+    </div>
+    <div class="summary-card fail">
+      <div class="number">0</div>
+      <div class="label">失败</div>
+    </div>
+    <div class="summary-card">
+      <div class="number" style="color: var(--accent)">5</div>
+      <div class="label">测试套件</div>
+    </div>
+  </div>
+
+  <div class="progress-bar">
+    <div class="fill" style="width: 100%"></div>
+  </div>
+  <p style="text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 24px;">通过率 100%</p>
+
+  <!-- Project Overview -->
+  <div class="section">
+    <h2>项目概览</h2>
+    <p class="subtitle">数智心屿 — ASD 儿童社交对话训练 AI 数字人</p>
+    <dl class="info-grid">
+      <dt>项目名称</dt>
+      <dd>数智心屿 (shuzhi-xinyu)</dd>
+      <dt>版本</dt>
+      <dd>v0.9 (alpha)</dd>
+      <dt>定位</dt>
+      <dd>AI 数字人社交练习陪伴工具，面向 ASD 儿童的对话训练</dd>
+      <dt>AI 角色</dt>
+      <dd>心屿 — VRM 1.0 3D 数字人，温和简短字面化交流</dd>
+      <dt>后端服务</dt>
+      <dd>
+        Flask (端口 5000) — 对话/评分/报告/TTS/STT<br>
+        FastAPI — 访问追踪服务 (apology-backend)
+      </dd>
+      <dt>前端</dt>
+      <dd>React 18 + Vite (端口 5173) + Three.js VRM</dd>
+      <dt>3D 模型</dt>
+      <dd>VRM 1.0 格式 (<code>xinyu.vrm</code>, 19MB)，含 viseme 口型同步 + 表情系统</dd>
+    </dl>
+    <div class="tech-stack">
+      <span class="tech-tag">React 18</span>
+      <span class="tech-tag">Vite 6</span>
+      <span class="tech-tag">Three.js</span>
+      <span class="tech-tag">@pixiv/three-vrm</span>
+      <span class="tech-tag">Flask 3</span>
+      <span class="tech-tag">FastAPI</span>
+      <span class="tech-tag">DeepSeek V3</span>
+      <span class="tech-tag">腾讯云 TTS</span>
+      <span class="tech-tag">腾讯云 ASR</span>
+      <span class="tech-tag">SQLAlchemy</span>
+      <span class="tech-tag">Recharts</span>
+    </div>
+  </div>
+
+  <!-- Test 1: Backend Stress Test -->
+  <div class="section">
+    <h2>后端压力测试 <span class="badge pass">15/15 通过</span></h2>
+    <p class="subtitle">stress_test.py — 三层 15 用例完整压力测试（含 DeepSeek API 真实调用）</p>
+    <table class="test-table">
+      <thead>
+        <tr><th></th><th>用例</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="icon pass">✓</td><td>A1 空消息列表不崩溃</td><td class="detail">返回 '你好。我在这里。'</td></tr>
+        <tr><td class="icon pass">✓</td><td>A2 缺 API Key 时降级到兜底</td><td class="detail">兜底返回：'我现在遇到一些问题，稍后再试试吧。'</td></tr>
+        <tr><td class="icon pass">✓</td><td>A3 消息字段缺 role/content</td><td class="detail">5 条非法输入，清洗后剩 1 条</td></tr>
+        <tr><td class="icon pass">✓</td><td>A4 messages 非 list 类型</td><td class="detail">4 种非法输入，4 个返回正常</td></tr>
+        <tr><td class="icon pass">✓</td><td>B1 score 缺字段自动补齐</td><td class="detail">4 种缺陷输入全部修复为 5 维度</td></tr>
+        <tr><td class="icon pass">✓</td><td>B2 JSON 围栏多种变体剥离</td><td class="detail">5/5 通过</td></tr>
+        <tr><td class="icon pass">✓</td><td>B3 评分超界自动 clip</td><td class="detail">clip 后：[1, 5, 1, 3, 5]，total=60</td></tr>
+        <tr><td class="icon pass">✓</td><td>B4 chat 输出无括号注释</td><td class="detail">3 次中 3 次合规</td></tr>
+        <tr><td class="icon pass">✓</td><td>B5 prompt 注入防御</td><td class="detail">回复：'我们就聊聊你今天的事吧。'</td></tr>
+        <tr><td class="icon pass">✓</td><td>B6 report 禁用词整句移除</td><td class="detail">过滤后：'本次表现不错。'</td></tr>
+        <tr><td class="icon pass">✓</td><td>B8 兜底字符串 source 标识</td><td class="detail">source=fallback</td></tr>
+        <tr><td class="icon pass">✓</td><td>C1 历史超长截断</td><td class="detail">原 50 条 → 截断后 20 条，首条=user</td></tr>
+        <tr><td class="icon pass">✓</td><td>C2 评分缓存进步对比</td><td class="detail">两次报告均生成成功</td></tr>
+        <tr><td class="icon pass">✓</td><td>C3 评分耗时</td><td class="detail">耗时 3.0s（建议 < 15s）</td></tr>
+        <tr><td class="icon pass">✓</td><td>C4 禁用词不产生碎片</td><td class="detail">过滤后：'整体表现不错。'</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Test 2: AI Service Unit Tests -->
+  <div class="section">
+    <h2>AI 服务单元测试 <span class="badge pass">4/4 通过</span></h2>
+    <p class="subtitle">test_ai.py — 直接调用 ai_service 的 chat / score / report 函数（真实 DeepSeek API）</p>
+    <table class="test-table">
+      <thead>
+        <tr><th></th><th>测试</th><th>结果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="icon pass">✓</td><td>chat() 对话功能</td><td class="detail">reply='你好呀，我叫心屿。你叫什么名字呢？' · stage=welcome</td></tr>
+        <tr><td class="icon pass">✓</td><td>score() 5维度评分</td><td class="detail">total_score=64 · 5维度含参与度 · 无解析错误</td></tr>
+        <tr><td class="icon pass">✓</td><td>report() 报告生成</td><td class="detail">生成中文反馈报告，含鼓励语+练习建议</td></tr>
+        <tr><td class="icon pass">✓</td><td>report() 历史对比+等级</td><td class="detail">初学等级报告+进步对比报告均成功</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Test 3: Flask API Endpoints -->
+  <div class="section">
+    <h2>Flask API 端点测试 <span class="badge pass">14/14 通过</span></h2>
+    <p class="subtitle">app.py — 所有 API 端点的功能与安全测试</p>
+    <table class="test-table">
+      <thead>
+        <tr><th></th><th>端点</th><th>结果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="icon pass">✓</td><td>GET /api/health</td><td class="detail">200 · {status: ok}</td></tr>
+        <tr><td class="icon pass">✓</td><td>GET / (首页)</td><td class="detail">200 · HTML 4733 bytes</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/chat (正常)</td><td class="detail">200 · '你好呀，我是心屿。你今天想聊点什么呢？'</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/chat (空消息)</td><td class="detail">200 · '你好。我在这里。'</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/chat (注入尝试)</td><td class="detail">200 · AI 未被越狱，正常回复</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/parent/verify (错误密码)</td><td class="detail">401 Unauthorized</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/parent/verify (正确密码)</td><td class="detail">200 · 返回 HMAC token</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/score (无鉴权)</td><td class="detail">401 Unauthorized</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/score (有鉴权)</td><td class="detail">200 · total_score=68</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/tts (空文本)</td><td class="detail">400 Bad Request</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/tts (超长文本)</td><td class="detail">413 Too Large</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/stt (无音频)</td><td class="detail">400 Bad Request</td></tr>
+        <tr><td class="icon pass">✓</td><td>安全头检测</td><td class="detail">X-Content-Type-Options=nosniff · X-Frame-Options=DENY</td></tr>
+        <tr><td class="icon pass">✓</td><td>CSP 头检测</td><td class="detail">default-src 'none'; frame-ancestors 'none'</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Test 4: Apology-Backend -->
+  <div class="section">
+    <h2>Apology-Backend (FastAPI) 测试 <span class="badge pass">12/12 通过</span></h2>
+    <p class="subtitle">apology-backend — 访问追踪服务的 API + 设备识别 + 管理后台测试</p>
+    <table class="test-table">
+      <thead>
+        <tr><th></th><th>测试</th><th>结果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="icon pass">✓</td><td>GET /api/health</td><td class="detail">200 · {status: ok}</td></tr>
+        <tr><td class="icon pass">✓</td><td>GET /api/count</td><td class="detail">200 · {count: 0}</td></tr>
+        <tr><td class="icon pass">✓</td><td>POST /api/visit</td><td class="detail">200 · {count: 1, visit_id: uuid}</td></tr>
+        <tr><td class="icon pass">✓</td><td>计数递增验证</td><td class="detail">before=0, after=1</td></tr>
+        <tr><td class="icon pass">✓</td><td>PATCH /api/visit/{id}</td><td class="detail">200 · {ok: true}</td></tr>
+        <tr><td class="icon pass">✓</td><td>设备识别: mobile</td><td class="detail">iPhone UA → mobile</td></tr>
+        <tr><td class="icon pass">✓</td><td>设备识别: tablet</td><td class="detail">iPad UA → tablet</td></tr>
+        <tr><td class="icon pass">✓</td><td>设备识别: desktop</td><td class="detail">Windows UA → desktop</td></tr>
+        <tr><td class="icon pass">✓</td><td>设备信息解析 (iPhone)</td><td class="detail">info='iPhone · iOS 16.0'</td></tr>
+        <tr><td class="icon pass">✓</td><td>管理后台 (无密钥)</td><td class="detail">403 Forbidden</td></tr>
+        <tr><td class="icon pass">✓</td><td>管理后台 (有密钥)</td><td class="detail">200 · HTML 2317 bytes</td></tr>
+        <tr><td class="icon pass">✓</td><td>根路径 GET /</td><td class="detail">200 · 返回前端页面</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Test 5: Frontend Build -->
+  <div class="section">
+    <h2>前端构建测试 <span class="badge pass">通过</span></h2>
+    <p class="subtitle">vite build — 前端生产构建验证</p>
+    <table class="test-table">
+      <thead>
+        <tr><th></th><th>指标</th><th>结果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="icon pass">✓</td><td>构建状态</td><td class="detail">成功 · 14.37s</td></tr>
+        <tr><td class="icon pass">✓</td><td>模块转换</td><td class="detail">1295 modules transformed</td></tr>
+        <tr><td class="icon pass">✓</td><td>CSS 产物</td><td class="detail">index-5h4J0Qas.css · 20.98 kB (gzip: 4.55 kB)</td></tr>
+        <tr><td class="icon pass">✓</td><td>JS 产物</td><td class="detail">index-Cg3z3TrH.js · 1814.60 kB (gzip: 512.15 kB)</td></tr>
+        <tr><td class="icon pass">✓</td><td>HTML 产物</td><td class="detail">index.html · 1.24 kB (gzip: 0.69 kB)</td></tr>
+        <tr><td class="icon pass">✓</td><td>PWA Service Worker</td><td class="detail">sw.js + workbox 生成 · 13 precache entries</td></tr>
+        <tr><td class="icon pass">✓</td><td>VRM 模型文件</td><td class="detail">xinyu.vrm · 19MB · 已在 public/models/ 目录</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Code Structure -->
+  <div class="section">
+    <h2>项目代码结构</h2>
+    <p class="subtitle">已读取的核心代码文件</p>
+    <table class="test-table">
+      <thead>
+        <tr><th>模块</th><th>文件</th><th>功能</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Flask 入口</td><td>backend/app.py</td><td class="detail">chat/score/report/tts/stt/parent/health + 安全中间件</td></tr>
+        <tr><td>AI 服务</td><td>backend/ai_service.py</td><td class="detail">对话/评分/报告 + 阶段场景提取 + 年龄分档 + 注入防御</td></tr>
+        <tr><td>LLM 客户端</td><td>backend/llm_client.py</td><td class="detail">DeepSeek V3 调用封装 + 兜底机制</td></tr>
+        <tr><td>TTS 服务</td><td>backend/tts_service.py</td><td class="detail">腾讯云 TTS · 智莉音色 101005</td></tr>
+        <tr><td>STT 服务</td><td>backend/stt_service.py</td><td class="detail">腾讯云 ASR · ffmpeg 转码 webm→wav</td></tr>
+        <tr><td>压力测试</td><td>backend/stress_test.py</td><td class="detail">三层 15 用例压力测试</td></tr>
+        <tr><td>AI 测试</td><td>backend/test_ai.py</td><td class="detail">chat/score/report 单元测试</td></tr>
+        <tr><td>追踪服务</td><td>apology-backend/main.py</td><td class="detail">FastAPI 访问追踪 + 设备识别 + 管理后台</td></tr>
+        <tr><td>追踪数据库</td><td>apology-backend/database.py</td><td class="detail">SQLAlchemy ORM · Visit 表</td></tr>
+        <tr><td>前端入口</td><td>frontend/src/App.jsx</td><td class="detail">路由 + 全局 Context + 设置持久化</td></tr>
+        <tr><td>3D 模型</td><td>frontend/src/three/XinyuModel.jsx</td><td class="detail">VRM 加载 + 眨眼 + 口型同步 + 表情</td></tr>
+        <tr><td>3D 模型文件</td><td>frontend/public/models/xinyu.vrm</td><td class="detail">VRM 1.0 · 19MB · 含 viseme + spring bones</td></tr>
+        <tr><td>模型规格</td><td>BLENDER_MODEL_SPEC.md</td><td class="detail">3D 模型制作需求文档</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Key Features Verified -->
+  <div class="section">
+    <h2>已验证的核心功能</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ AI 对话</strong> — DeepSeek V3 真实调用，回复温和简短，符合 ASD 友好原则
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 5 维度评分</strong> — 主动发起/话题维持/情绪识别/礼貌用语/参与度，自动校验补齐
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 家长报告</strong> — 中文反馈报告，进步对比，禁用词过滤
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ Prompt 注入防御</strong> — 8 类注入模式检测 + 温和拒绝
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 家长鉴权</strong> — HMAC token + 密码校验 + 限流 5次/分钟
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 安全头</strong> — CSP / X-Frame-Options / X-Content-Type / Referrer-Policy
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 3D VRM 模型</strong> — 19MB VRM 1.0 模型加载，含 viseme 口型 + 表情
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 前端构建</strong> — Vite 6 生产构建，1295 模块，PWA 支持
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 访问追踪</strong> — FastAPI + SQLAlchemy，设备识别 + 页码追踪
+      </div>
+      <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+        <strong>✅ 兜底机制</strong> — API 失败时返回温和兜底字符串，永不抛异常
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>数智心屿 · 全栈测试报告 · 2026-07-04</p>
+  <p style="margin-top: 4px;">全部 45 项测试通过 · 前端构建成功 · DeepSeek API 连通正常</p>
+</div>
+
+</body>
+</html>

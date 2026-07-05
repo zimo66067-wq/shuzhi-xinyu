@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext } from 'react'
 import AppSidebar from './components/AppSidebar'
-import { saveSession } from './lib/sessionHistory'
+import { saveSession, hasRestorableMessages } from './lib/sessionHistory'
 import StartupPage from './pages/StartupPage'
 import ChatPage from './pages/ChatPage'
 import ToolboxPage from './pages/ToolboxPage'
@@ -174,12 +174,34 @@ function App() {
   const [showRecovered, setShowRecovered] = useState(false)
 
   const navigate = (page) => {
-    // 离开对话页时保存本次会话摘要到侧边栏历史
+    // 离开对话页时保存本次会话到侧边栏历史
     if (currentPage === 'chat' && page !== 'chat' && childInfo && messages.length > 0) {
       saveSession(childInfo.name, messages)
     }
     setCurrentPage(page)
     localStorage.setItem('xinyu_currentPage', page)
+  }
+
+  const restoreSession = (session) => {
+    if (!hasRestorableMessages(session)) {
+      window.alert('这条旧记录只保存了摘要，不能还原完整对话。新产生的记录可点击恢复。')
+      return
+    }
+
+    if (currentPage === 'chat' && childInfo && messages.length > 0) {
+      saveSession(childInfo.name, messages)
+    }
+
+    if (!childInfo) {
+      setChildInfo({ name: session.childName || '练习', age: 7 })
+    }
+    setMessages(session.messages)
+    setAcousticHistory([])
+    setCurrentStage('welcome')
+    setScenario(null)
+    setCurrentScene(null)
+    setCurrentPage('chat')
+    localStorage.setItem('xinyu_currentPage', 'chat')
   }
 
   // 防止直接刷新到 chat 但 childInfo 已丢失：回退到 startup
@@ -261,7 +283,7 @@ function App() {
     >
       {/* app-shell：桌面端 flex-row（侧边栏 + 主区），移动端退化为 flex-column */}
       <div className={`app-shell${settings.animations ? '' : ' reduce-motion'}`}>
-        <AppSidebar navigate={navigate} currentPage={currentPage} />
+        <AppSidebar navigate={navigate} currentPage={currentPage} onSelectSession={restoreSession} />
         <div className="app-main">
           {!isOnline && (
             <div className="offline-banner">网络断开了，心屿等你回来 🌙</div>

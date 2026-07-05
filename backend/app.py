@@ -34,8 +34,14 @@ import stt_service
 
 app = Flask(__name__)
 
-# ── 安全：请求体大小全局上限 1MB；STT 端点单独放宽 ──────────────────────
-app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB
+# ── 安全：请求体大小全局上限（默认 1MB）──────────────────────────────
+# STT 端点需要接收音频文件（≤ 8MB），因此通过环境变量 FLASK_MAX_CONTENT_LENGTH
+# 在 Render 等生产环境可调整为更大的值。本地开发保持 1MB 即可。
+# 示例：FLASK_MAX_CONTENT_LENGTH=8388608（8MB）
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get(
+    "FLASK_MAX_CONTENT_LENGTH",
+    1 * 1024 * 1024  # 默认 1 MB
+))
 
 # ── 安全：CORS Origin 白名单 ───────────────────────────────────────────
 # 默认仅允许 localhost dev；生产部署通过 CORS_ORIGINS 环境变量配置

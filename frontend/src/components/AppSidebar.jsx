@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { loadSessions } from '../lib/sessionHistory'
+import { loadSessions, hasRestorableMessages } from '../lib/sessionHistory'
 
 const COLLAPSED_KEY = 'xinyu_sidebar_collapsed'
 
@@ -20,7 +20,7 @@ function fmtDate(iso) {
   }
 }
 
-export default function AppSidebar({ navigate, currentPage }) {
+export default function AppSidebar({ navigate, currentPage, onSelectSession }) {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem(COLLAPSED_KEY) === 'true',
   )
@@ -96,14 +96,23 @@ export default function AppSidebar({ navigate, currentPage }) {
             <div className="sb-history-empty">暂无记录</div>
           ) : (
             <div className="sb-history-list">
-              {sessions.map((s) => (
-                <div key={s.id} className="sb-history-item">
-                  <div className="sb-history-meta">
-                    {s.childName} · {fmtDate(s.date)} · {s.messageCount} 条
-                  </div>
-                  <div className="sb-history-preview">{s.preview}</div>
-                </div>
-              ))}
+              {sessions.map((s) => {
+                const restorable = hasRestorableMessages(s)
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`sb-history-item${restorable ? '' : ' legacy'}`}
+                    onClick={() => onSelectSession?.(s)}
+                    title={restorable ? '打开这次对话' : '旧记录只有摘要，无法还原完整对话'}
+                  >
+                    <div className="sb-history-meta">
+                      {s.childName} · {fmtDate(s.date)} · {s.messageCount} 条
+                    </div>
+                    <div className="sb-history-preview">{s.preview}</div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>

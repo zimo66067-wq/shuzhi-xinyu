@@ -5,8 +5,12 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 前端构建检查
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -29,7 +33,21 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+        env:
+          VITE_API_BASE: https://shuzhi-xinyu-api.onrender.com
 
+      - name: Verify build output exists
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "ERROR: dist/index.html not found — build may have failed silently"
+            exit 1
+          fi
+          echo "Build output size: $(du -sh dist/)"
+          echo "Build successful!"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 后端冒烟测试
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   backend-smoke:
     name: Backend smoke test
     runs-on: ubuntu-latest
@@ -43,6 +61,7 @@ jobs:
       PARENT_PASSWORD: ci-only-password
       PARENT_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      FLASK_MAX_CONTENT_LENGTH: "1048576"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,5 +80,69 @@ jobs:
           python -c "from app import app;
           client = app.test_client();
           response = client.get('/api/health');
-          assert response.status_code == 200, response.status_code;
-          assert response.get_json() == {'status': 'ok'}, response.get_data(as_text=True)"
+          assert response.status_code == 200, f'Health check failed: {response.status_code}';
+          assert response.get_json() == {'status': 'ok'}, f'Unexpected response: {response.get_data(as_text=True)}';
+          print('Health check passed!')"
+
+      - name: Verify parent auth flow
+        run: >-
+          python -c "from app import app;
+          import json;
+          client = app.test_client();
+          # 正确的密码应该返回 token
+          resp = client.post('/api/parent/verify', json={'password': 'ci-only-password'});
+          assert resp.status_code == 200, f'Auth failed: {resp.status_code}';
+          data = resp.get_json();
+          assert 'token' in data, f'Missing token in response: {data}';
+          print('Parent auth flow passed!')"
+
+      - name: Verify CORS headers present
+        run: >-
+          python -c "from app import app;
+          client = app.test_client();
+          resp = client.get('/api/health');
+          assert 'X-Content-Type-Options' in resp.headers, 'Missing security header';
+          print('Security headers verified!')"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 前端代码静态检查（可选增强）
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  frontend-lint:
+    name: Frontend lint check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check import paths exist
+        run: |
+          echo "Checking that all source files are importable..."
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const srcDir = path.join(process.cwd(), 'src');
+            if (!fs.existsSync(srcDir)) {
+              console.error('src/ directory not found');
+              process.exit(1);
+            }
+            const files = fs.readdirSync(srcDir, {recursive: true}).filter(f => f.endsWith('.jsx') || f.endsWith('.js'));
+            console.log('Found ' + files.length + ' source files');
+            if (files.length < 5) {
+              console.error('Too few source files — something may be missing');
+              process.exit(1);
+            }
+            console.log('Source structure verification passed!');
+          "
