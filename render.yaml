@@ -17,7 +17,8 @@ services:
     name: shuzhi-xinyu-api
     runtime: python
     region: singapore
-    plan: free
+    # Starter instances stay running; Free instances spin down after idle time.
+    plan: starter
     rootDir: backend
 
     # ── 构建与启动 ──────────────────────────────────────────────
@@ -77,32 +78,3 @@ services:
 
       # Render 自动注入 PORT，不要手动设置
       # FLASK_HOST / FLASK_DEBUG 不需要设置（gunicorn 自动处理）
-
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  # 访问追踪 FastAPI 服务（可选，独立仓库）
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  - type: web
-    name: shuzhi-xinyu-track
-    runtime: python
-    repo: https://github.com/zimo66067-wq/apology.git
-    region: singapore
-    plan: free
-    rootDir: .
-
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-
-    autoDeployTrigger: commit
-    healthCheckPath: /api/health
-
-    envVars:
-      - key: ADMIN_KEY
-        sync: false
-        # 管理后台密钥
-
-      - key: DATABASE_URL
-        value: sqlite:///./visits.db
-        # ⚠️ SQLite 在 Render 免费实例上不可靠（重启/休眠/重新部署后丢失）
-        # 需要长期保留数据时，改为免费 Postgres 连接串：
-        # 例如 Supabase: postgresql://user:pass@host:5432/db
-        # 或 Neon.tech: postgresql://user:pass@host:5432/db?sslmode=require
