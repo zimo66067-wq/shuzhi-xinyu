@@ -6,7 +6,7 @@
 #   2. 连接 GitHub 仓库 zimo66067-wq/shuzhi-xinyu
 #   3. Render 自动读取本文件创建所有服务
 #
-# 重要：首次部署后，必须将 Vercel 实际域名回填到 CORS_ORIGINS 中！
+# 重要：新增前端正式域名时，同步更新 CORS_ORIGINS 和既有服务的环境变量。
 # =============================================================================
 
 services:
@@ -60,11 +60,10 @@ services:
         # Token 签名密钥，Blueprint 会自动生成 32 字节随机值
         # 手动部署时：python -c "import secrets; print(secrets.token_hex(32))"
 
-      # === 推荐配置（根据实际域名修改）===
+      # === 前端跨域来源（两个 Vercel 正式域名）===
       - key: CORS_ORIGINS
-        value: "https://<YOUR-VERCEL-DOMAIN>.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
-        # ⚠️ 部署后把 <YOUR-VERCEL-DOMAIN> 替换为 Vercel 分配的实际域名
-        # 例如：CORS_ORIGINS=https://shuzhi-xinyu.vercel.app,http://localhost:5173
+        value: "https://shuzhi-xinyu.vercel.app,https://shuzhi-xinyu-jd6f.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
+        # 新增正式域名时请在此处同步添加；既有服务还需核对 Render Dashboard 的实际环境变量
 
       # === 服务器配置 ===
       - key: GUNICORN_LOG_LEVEL
