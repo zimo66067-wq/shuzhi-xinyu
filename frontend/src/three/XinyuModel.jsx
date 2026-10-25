@@ -45,6 +45,7 @@ function XinyuModel({
   highBand = 0,
   expression = 'neutral',
   reduceMotion = false,
+  onAudit,
 }) {
   const groupRef = useRef()
   const vrmRef = useRef(null)
@@ -69,6 +70,7 @@ function XinyuModel({
   // 朝向通过下面 JSX 的 group rotation 控制，不在这里改 vrm.scene
   useEffect(() => {
     if (!vrm) return
+    onAudit?.('vrm_loaded')
     vrmRef.current = vrm
 
     // 修复：useGLTF 缓存的 vrm.scene 可能被早期代码改过旋转。

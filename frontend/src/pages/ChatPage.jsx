@@ -89,7 +89,7 @@ function getFontScale(band) {
   return 1.0
 }
 
-function ChatPage({ navigate }) {
+function ChatPage({ navigate, experiment = null }) {
   const {
     childInfo,
     messages,
@@ -139,14 +139,15 @@ function ChatPage({ navigate }) {
   // 任务 3 + F1：年龄分档（low/mid/high）
   // 治疗师流：优先读 sessionConfig.ageBand；否则从 childInfo.age 推断
   const ageBand = useMemo(
-    () => getSessionConfig()?.ageBand || getAgeBand(childInfo?.age),
-    [childInfo?.age],
+    () => (!experiment && getSessionConfig()?.ageBand) || getAgeBand(childInfo?.age),
+    [childInfo?.age, experiment],
   )
   // 10+ 岁的扩展表情面板开关
   const [emojiExpanded, setEmojiExpanded] = useState(false)
 
   // F1：首次挂载时，若 sessionConfig 含场景且本次 session 尚未应用，则自动切入
   useEffect(() => {
+    if (experiment) return
     const cfg = getSessionConfig()
     if (!cfg) return
     if (sessionStorage.getItem('xy_session_applied')) return
@@ -243,7 +244,9 @@ function ChatPage({ navigate }) {
     startRecording,
     stopRecording,
   } = usePushToTalk({
-    onTranscript: (text) => sendMessage(text),
+    onTranscript: (text) => sendMessage(text, 'voice'),
+    requestHeaders: experiment?.requestHeaders,
+    onEvent: experiment?.emit,
     onSafetySignal: settings.acoustic ? handleSafetySignal : undefined,
     onAcousticSummary: settings.acoustic
       ? (features) => pushAcousticFeatures(features)
@@ -335,8 +338,20 @@ function ChatPage({ navigate }) {
     return () => clearTimeout(t)
   }, [settings.sessionLimitMin])
 
-  const sendMessage = async (text) => {
+  const experimentBusy = useRef(false)
+  const pendingRender = useRef(null)
+  useEffect(() => {
+    if (experiment && pendingRender.current && messages.at(-1)?.role === 'assistant') {
+      const rendered = pendingRender.current
+      pendingRender.current = null
+      experiment.emit('ui_render', { turn_id: rendered.turn_id, text: messages.at(-1).content })
+    }
+  }, [messages, experiment])
+
+  const sendMessage = async (text, modality = 'text') => {
     if (!text.trim() || !isOnline) return
+    if (experiment && experimentBusy.current) return
+    if (experiment) experimentBusy.current = true
 
     cancelTTS()
     setTtsSubtitle('')
@@ -360,6 +375,11 @@ function ChatPage({ navigate }) {
       : newMessages
 
     try {
+      let data
+      if (experiment) {
+        data = await experiment.send(text, scenario, modality)
+        pendingRender.current = data._experiment
+      } else {
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -370,7 +390,8 @@ function ChatPage({ navigate }) {
         }),
       })
       if (!response.ok) throw new Error('Network error')
-      const data = await response.json()
+      data = await response.json()
+      }
       const reply = data.reply || '心屿暂时说不出话来'
 
       // 训练阶段（自由聊天模式）/ 子场景（场景模式）二选一
@@ -409,6 +430,8 @@ function ChatPage({ navigate }) {
 
       setMessages([...newMessages, { role: 'assistant', content: reply }])
       setTtsSubtitle(reply)
+      // Model request is done. Speaking must not lock later experimental turns.
+      experimentBusy.current = false
 
       // 整改 A-6：自动朗读开关关闭时，只显示字幕、不播 TTS
       if (!settings.autoTTS) {
@@ -419,6 +442,8 @@ function ChatPage({ navigate }) {
 
       setXinyuState('speaking')
       await speak(reply, {
+        requestHeaders: experiment?.requestHeaders,
+        onEvent: experiment?.emit,
         // P-6：语速/音调/音量走家长设置
         rate: settings.ttsRate,
         pitch: settings.ttsPitch,
@@ -440,11 +465,20 @@ function ChatPage({ navigate }) {
         },
       })
     } catch (err) {
+      if (experiment) {
+        experiment.setError(err.message)
+        experiment.emit('frontend_error', { detail: err.message })
+        setTtsSubtitle('本轮出现错误，请保留记录并复核。')
+        setXinyuState('idle')
+        return
+      }
       console.debug('[ChatPage] 调用后端失败:', err)
       setMessages([...newMessages, { role: 'assistant', content: '心屿暂时说不出话' }])
       setTtsSubtitle('心屿暂时说不出话')
       setAudioState({ volume: 0, lowBand: 0, midBand: 0, highBand: 0 })
       setXinyuState('idle')
+    } finally {
+      experimentBusy.current = false
     }
   }
 
@@ -659,6 +693,7 @@ function ChatPage({ navigate }) {
           <div className="avatar-zone" style={{ flex: 1, height: 'auto' }}>
             <div className={`avatar-halo ${isThinking ? 'thinking' : ''}`}>
               <XinyuScene
+                onAudit={experiment?.onModelEvent}
                 state={xinyuState}
                 volume={audioState.volume}
                 lowBand={audioState.lowBand}
@@ -729,7 +764,7 @@ function ChatPage({ navigate }) {
                 <span
                   key={`${item.label}-${idx}`}
                   className="emoji-mini"
-                  onClick={() => isOnline && sendMessage(item.text)}
+                  onClick={() => isOnline && sendMessage(item.text, 'sticker')}
                   role="button"
                   aria-label={`表达：${item.label}`}
                 >

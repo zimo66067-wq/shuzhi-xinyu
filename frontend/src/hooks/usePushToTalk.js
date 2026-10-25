@@ -15,6 +15,8 @@ function usePushToTalk({
   onSafetySignal,
   onAcousticSummary,
   minRecordMs = 300, // P-5：最短录音时长，可由家长设置调整
+  requestHeaders,
+  onEvent,
 } = {}) {
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
@@ -61,6 +63,7 @@ function usePushToTalk({
       const rec = createRecorder()
       recorderRef.current = rec
       await rec.start()
+      onEvent?.('stt_start')
       startTimeRef.current = Date.now()
       // 录音启动成功后，把 stream 暴露给声学分析
       setAnalyzingStream(rec.getStream())
@@ -104,7 +107,7 @@ function usePushToTalk({
 
       setIsTranscribing(true)
       try {
-        const { text } = await transcribe(blob)
+        const { text } = await transcribe(blob, { requestHeaders, onEvent })
         if (!text) {
           setError('心屿没听清，再说一次')
         } else if (typeof onTranscript === 'function') {
