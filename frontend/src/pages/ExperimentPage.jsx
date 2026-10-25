@@ -151,7 +151,19 @@ export default function ExperimentPage() {
           <label className="experiment-check"><input type="checkbox" checked={manual} onChange={(e) => setManual(e.target.checked)} required />本人以成年人虚拟角色人工执行，未使用脚本或 AI 代测</label><button disabled={busy}>追加现场记录</button></form>
         <button disabled={busy || selected.session.state !== 'in_progress'} onClick={() => run(() => client.call(`/sessions/${selected.session.id}/submit`, 'POST', {}))}>封存并提交会话</button></>}
       <h3>交互记录</h3>{selected.turns.map((t) => <article key={t.id}><p>第 {t.turn_no} 轮 · {t.source || t.status} · {t.trace_id}</p><p>输入：{parse(t.input).text}</p><p>业务回复：{parse(t.output).reply || '尚无结果'}</p>
-        {admin && <details><summary>服务端审计字段与尝试</summary><pre>{pretty(t)}</pre></details>}</article>)}
+        {admin && <section aria-label="本轮上游API调用明细"><h4>上游API调用明细</h4>
+          {Array.isArray(parse(t.attempts)) && parse(t.attempts).length
+            ? parse(t.attempts).map((a, i) => <dl key={a.attempt_id || i}>
+                <dt>第 {i + 1} 次调用：{a.status || '未知'}</dt>
+                <dd>模式：{a.mode || '未记录'} · 请求模型：{a.model_requested || '未记录'} · 实际返回模型：{a.model_returned || '未返回'}</dd>
+                <dd>HTTP状态：{a.http_status ?? '未收到'} · 用时：{a.elapsed_ms ?? '未记录'} ms · 结束原因：{a.finish_reason || '未返回'}</dd>
+                <dd>上游响应ID：{a.provider_response_id || '未返回'} · 上游请求ID：{a.provider_request_id || '未返回'}</dd>
+                <dd>输入Tokens：{a.usage?.prompt_tokens ?? '未返回'} · 输出Tokens：{a.usage?.completion_tokens ?? '未返回'} · 合计Tokens：{a.usage?.total_tokens ?? '未返回'}</dd>
+                {a.error_type && <dd>错误：{a.error_type}</dd>}
+              </dl>)
+            : <p>本轮无上游模型调用记录；请核对是否为本地拦截、固定回退或未实际发起请求。</p>}
+        </section>}
+        {admin && <details><summary>服务端完整审计字段与尝试</summary><pre>{pretty(t)}</pre></details>}</article>)}
       {canRate && selected.session.state === 'submitted' && !selected.ratings.some((r) => r.rater_id === auth.user.id) && <ScoreForm key={selected.session.id} onSubmit={(d) => run(() => client.call(`/sessions/${selected.session.id}/ratings`, 'POST', d))} />}
       <details><summary>已开放的独立评分与复核记录</summary><pre>{pretty({ ratings: selected.ratings, decisions: selected.decisions })}</pre></details>
       {admin && selected.session.state === 'submitted' && selected.ratings.length === 2 && <ScoreForm review key={`review:${selected.session.id}`} onSubmit={(d) => run(() => client.call(`/sessions/${selected.session.id}/review`, 'POST', d))} />}
