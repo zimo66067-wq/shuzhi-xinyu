@@ -16,8 +16,11 @@ llm_client.py — LLM 调用层（DeepSeek 单一）
 
 import logging
 import os
+import time
+from contextvars import ContextVar
 
 import requests
+from experiment import audit
 
 # 略短于 Flask worker 默认超时（30s），给应用层留余地
 REQUEST_TIMEOUT = 25
@@ -26,12 +29,12 @@ REQUEST_TIMEOUT = 25
 FALLBACK_REPLY = "我现在遇到一些问题，稍后再试试吧。"
 
 # 记录最后一次调用的来源（deepseek / fallback / none）
-_last_source = "none"
+_last_source = ContextVar("last_llm_source", default="none")
 
 
 def get_last_source() -> str:
     """返回上一次调用的来源标识，用于运维监控。"""
-    return _last_source
+    return _last_source.get()
 
 
 # ── DeepSeek 调用 ─────────────────────────────────────────────────────────
@@ -51,22 +54,32 @@ def call_deepseek(
 
     full_messages = [{"role": "system", "content": system_prompt}] + messages
 
-    response = requests.post(
-        "https://api.deepseek.com/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
+    payload = {
             "model": model,
             "messages": full_messages,
             "temperature": 0.8,
             "max_tokens": 500,
-        },
-        timeout=REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    }
+    endpoint = "https://api.deepseek.com/chat/completions"
+    attempt = audit.dispatch(payload, endpoint)
+    if attempt is not None:
+        attempt["_clock"] = time.monotonic()
+    response = None
+    try:
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload, timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        if audit.current.get() and (not isinstance(content, str) or not content.strip()):
+            raise ValueError("empty upstream content")
+    except Exception as exc:
+        audit.received(attempt, response, error=exc)
+        raise
+    audit.received(attempt, response, content=content)
+    return content
 
 
 # ── 统一入口（含兜底）─────────────────────────────────────────────────────
@@ -75,14 +88,17 @@ def call_llm(system_prompt: str, messages: list[dict]) -> str:
     """
     调用 DeepSeek，失败返回兜底字符串。永不抛出异常。
     """
-    global _last_source
-
     try:
         result = call_deepseek(system_prompt, messages)
-        _last_source = "deepseek"
+        _last_source.set("deepseek")
         return result
+    except audit.AuditWriteError:
+        raise
     except Exception as e:
-        logging.warning(f"[LLM] DeepSeek 调用失败：{e}")
+        # Exception bodies can contain user input or credentials. No raw body in logs.
+        logging.warning("[LLM] DeepSeek 调用失败：%s", type(e).__name__)
+        if audit.current.get() and not audit.current.get().attempts:
+            audit.local("local_fallback", type(e).__name__)
 
-    _last_source = "fallback"
+    _last_source.set("fallback")
     return FALLBACK_REPLY
