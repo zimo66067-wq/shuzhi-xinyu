@@ -1,0 +1,8 @@
+......................................................                   [100%]
+=============================== warnings summary ===============================
+backend/tests/test_experiment.py::test_40_sessions_are_plans_not_40_calls
+  /workspace/scratch/2b6f8f5532a7/repo/.venv/lib/python3.12/site-packages/pydub/utils.py:14: DeprecationWarning: 'audioop' is deprecated and slated for removal in Python 3.13
+    import audioop
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+54 passed, 1 warning in 35.69s
