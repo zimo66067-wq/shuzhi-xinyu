@@ -5,7 +5,7 @@
 ## 本地试运行
 
 1. 检出开发分支；安装 backend/requirements.txt和前端npm ci；单元测试另装pytest。
-2. 设置环境，不把凭据写入Git：EXPERIMENT_ENABLED=1，EXPERIMENT_ENV=pilot，EXPERIMENT_DB为明确绝对文件路径，EXPERIMENT_HUMAN_VERIFICATION=supervised。DeepSeek密钥仍只在后端DEEPSEEK_API_KEY配置，模型不变。
+2. 设置环境，不把凭据写入Git：EXPERIMENT_ENABLED=1，EXPERIMENT_ENV=pilot，EXPERIMENT_DB为明确绝对文件路径，EXPERIMENT_HUMAN_VERIFICATION=supervised。DeepSeek密钥仍只在后端DEEPSEEK_API_KEY配置；DEEPSEEK_MODEL默认为deepseek-flash（V4.1 Flash），显式thinking.type=disabled。正式实验必须冻结请求模型名、实际返回模型名及参数，不得中途修改。
 3. 在backend目录运行 `python -m experiment.cli bootstrap --db /absolute/path/pilot.sqlite3 --username captain`。密码通过getpass交互输入，至少12字符，命令行不带密码。没有内置正式默认账号。仅第一位管理员可离线创建；后续通过登录后的账号管理创建/重置/停用。
 4. 同时启动后端 `python app.py` 与前端 `npm run dev`；访问 http://localhost:5173/experiment。不要运行附件中Windows专用的“停止所有Python进程”命令。
 5. 管理员创建两名测试者及两名评分者，共四个不同executor账号；评分权限按会话分配，不通过普通家长密码获取。
@@ -40,7 +40,7 @@
 
 指标JSON只填实际可评价项目。例如 `{"key_steps":{"numerator":3,"denominator":4}}` 表示4个预定可评价步骤中3个正确；必须在证据说明中列出这4项。task_completion按会话是否满足必备行为；state_change按适用变更动作；stt_success按真实发起识别；tts_success按播放尝试；vrm_feedback按可观察触发；error_recovery按实际故障恢复机会。功能未实现或未采集留NULL，不填100%。浏览器回调只证明回调触发，不直接证明音频可听或动作正确。
 
-管理员依次核对 provider_send → provider_result → business_response → ui_render，检查原始正文、HTTP、usage与completion ID实际是否存在，查看local_decision、risk、stt/tts单列记录，运行完整性核验。正常本地安全拦截不算API失败。对没有UI回显或未知来源的记录保持“待证实”，不得人工补造provider事件。
+管理员可在会话审查页面直接查看请求模型、实际返回模型、上游响应ID、HTTP状态、输入/输出/总Token与耗时，并依次核对 provider_send → provider_result → business_response → ui_render，检查原始正文、HTTP、usage与completion ID实际是否存在，查看local_decision、risk、stt/tts单列记录，运行完整性核验。正常本地安全拦截不算API失败。对没有UI回显或未知来源的记录保持“待证实”，不得人工补造provider事件。
 
 提供商对账：保留同一时间窗账号后台用量/计费记录，按completion id或request id（如果提供商可检索）逐条核对；不能检索时只写“总量旁证”。解释共用Key、pilot、重试及失败计费差异。代码没有读取DeepSeek账号控制台，也没有完成提供商独立对账。哈希和自行写入的服务器日志不能替代该证据。
 
