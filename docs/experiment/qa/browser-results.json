@@ -1,0 +1,59 @@
+{
+  "kind": "synthetic_automated_QA_not_human_experiment",
+  "checks": [
+    {
+      "check": "admin sees 40 planned sessions",
+      "passed": true
+    },
+    {
+      "check": "executor sees exactly 20 assigned sessions",
+      "passed": true
+    },
+    {
+      "check": "executor has no admin batch controls",
+      "passed": true
+    },
+    {
+      "check": "keyless chat honestly classified local_fallback",
+      "passed": true
+    },
+    {
+      "check": "local safety intercept visible",
+      "passed": true
+    },
+    {
+      "check": "exactly two QA turns and zero upstream attempts",
+      "passed": true
+    },
+    {
+      "check": "browser rendering acknowledges both business replies",
+      "passed": true
+    },
+    {
+      "check": "full QA evidence chain verifies",
+      "passed": true
+    },
+    {
+      "check": "all browser records explicitly automated",
+      "passed": true
+    },
+    {
+      "check": "no ordinary localStorage history was written",
+      "passed": true
+    },
+    {
+      "check": "ordinary entry renders without experiment controls",
+      "passed": true
+    },
+    {
+      "check": "mobile page avoids document horizontal overflow",
+      "passed": true
+    },
+    {
+      "check": "no uncaught browser JavaScript errors",
+      "passed": true
+    }
+  ],
+  "real_api_tested": false,
+  "human_multimodal_observation_tested": false
+}

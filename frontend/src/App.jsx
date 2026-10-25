@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext } from 'react'
+import { useState, useEffect, createContext, lazy, Suspense } from 'react'
 import AppSidebar from './components/AppSidebar'
 import { saveSession, hasRestorableMessages } from './lib/sessionHistory'
 import StartupPage from './pages/StartupPage'
@@ -11,11 +11,12 @@ import RestPage from './pages/RestPage'
 import ParentPage from './pages/ParentPage'
 import TherapistEntryPage from './pages/TherapistEntryPage'
 import SessionReviewPage from './pages/SessionReviewPage'
+const ExperimentPage = lazy(() => import('./pages/ExperimentPage'))
 
 // 全局对话上下文：孩子信息 + 完整 messages + 网络状态
 export const ChatContext = createContext(null)
 
-function App() {
+function RegularApp() {
   const [currentPage, setCurrentPage] = useState(() => {
     // 任务 4b：URL 直达支持（不引 react-router，仅在启动时读 pathname）
     // /parent → 家长后台；其它路径走 localStorage 上次的页面或 startup
@@ -300,4 +301,8 @@ function App() {
   )
 }
 
-export default App
+export default function App() {
+  // Mount separately: ordinary persistence effects never run in research mode.
+  return window.location.pathname.replace(/\/$/, '') === '/experiment'
+    ? <Suspense fallback={<p>正在载入科研实验入口…</p>}><ExperimentPage /></Suspense> : <RegularApp />
+}

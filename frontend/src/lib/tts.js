@@ -11,6 +11,7 @@ let currentAudioCtx = null
 let currentRaf = null
 let currentEnvelope = null
 let currentObjectURL = null
+let currentAudit = null
 
 function pickVoice() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null
@@ -45,6 +46,7 @@ export function isSpeaking() {
 }
 
 export function cancel() {
+  if (currentAudit) { currentAudit('tts_cancel'); currentAudit = null }
   if (currentRaf) {
     cancelAnimationFrame(currentRaf)
     currentRaf = null
@@ -75,10 +77,10 @@ export function cancel() {
   }
 }
 
-async function speakWithEdgeTTS(text, { onVolume, onEnd, rate = 1, volume = 1 }) {
+async function speakWithEdgeTTS(text, { onVolume, onEnd, rate = 1, volume = 1, requestHeaders, onEvent }) {
   const response = await fetch(TTS_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(requestHeaders ? await requestHeaders('tts') : {}) },
     body: JSON.stringify({ text }),
   })
   if (!response.ok) throw new Error(`edge-tts HTTP ${response.status}`)
@@ -150,6 +152,8 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd, rate = 1, volume = 1 })
       currentAudio = null
       currentAudioCtx = null
       onEnd()
+      onEvent?.('tts_end', { detail: 'tencent_audio_element_end; audibility_requires_human_observation' })
+      currentAudit = null
       resolve()
     }
 
@@ -205,10 +209,12 @@ async function speakWithEdgeTTS(text, { onVolume, onEnd, rate = 1, volume = 1 })
   })
 }
 
-function speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd }) {
+function speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd, onEvent }) {
   return new Promise((resolve) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       onEnd()
+      onEvent?.('tts_error', { detail: 'browser_speech_unavailable' })
+      currentAudit = null
       resolve()
       return
     }
@@ -248,6 +254,8 @@ function speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd }) {
         console.warn('[TTS] Web Speech 出错:', errorEvent.error)
       }
       onEnd()
+      onEvent?.(errorEvent?.error ? 'tts_error' : 'tts_end', { detail: 'browser_speech_callback' })
+      currentAudit = null
       resolve()
     }
 
@@ -272,14 +280,19 @@ export async function speak(text, options = {}) {
     volume = 1.0,
     onVolume = () => {},
     onEnd = () => {},
+    requestHeaders,
+    onEvent,
   } = options
+  currentAudit = onEvent || null
+  onEvent?.('tts_start')
 
   try {
-    await speakWithEdgeTTS(text, { onVolume, onEnd, rate, volume })
+    await speakWithEdgeTTS(text, { onVolume, onEnd, rate, volume, requestHeaders, onEvent })
     return
   } catch (e) {
+    onEvent?.('tts_browser_fallback', { detail: e.message })
     console.warn('[TTS] edge-tts 不可用，降级 Web Speech:', e.message)
   }
 
-  await speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd })
+  await speakWithWebSpeech(text, { rate, pitch, volume, onVolume, onEnd, onEvent })
 }

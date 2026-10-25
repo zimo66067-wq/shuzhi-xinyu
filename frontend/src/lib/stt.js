@@ -87,7 +87,7 @@ export function createRecorder() {
   return controller
 }
 
-export async function transcribe(blob) {
+export async function transcribe(blob, { requestHeaders, onEvent } = {}) {
   if (!blob || blob.size === 0) {
     return { text: '' }
   }
@@ -96,6 +96,7 @@ export async function transcribe(blob) {
 
   const response = await fetch(STT_ENDPOINT, {
     method: 'POST',
+    ...(requestHeaders ? { headers: await requestHeaders('stt') } : {}),
     body: formData,
   })
   if (!response.ok) {
@@ -103,5 +104,6 @@ export async function transcribe(blob) {
     throw new Error(errorBody.error || `STT HTTP ${response.status}`)
   }
   const data = await response.json()
+  onEvent?.('stt_text', { text: (data.text || '').trim() })
   return { text: (data.text || '').trim() }
 }

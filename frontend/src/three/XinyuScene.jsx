@@ -25,6 +25,7 @@ class ModelErrorBoundary extends Component {
     return { hasError: true }
   }
   componentDidCatch(error) {
+    this.props.onAudit?.('vrm_error')
     console.warn('[XinyuScene] 模型加载失败，使用占位光晕:', error?.message || error)
   }
   render() {
@@ -58,6 +59,7 @@ function XinyuScene({
   highBand = 0,
   expression = 'neutral',
   reduceMotion = false,
+  onAudit,
 }) {
   return (
     <Canvas
@@ -79,9 +81,10 @@ function XinyuScene({
       {/* 正面贴脸补光：消除"额头下半张脸偏暗"的卡通脸通病 */}
       <pointLight position={[0, 1.45, 1.0]} intensity={0.4} color="#FFFAF0" distance={3} />
 
-      <ModelErrorBoundary fallback={<XinyuFallback />}>
+      <ModelErrorBoundary fallback={<XinyuFallback />} onAudit={onAudit}>
         <Suspense fallback={<XinyuFallback />}>
           <XinyuModel
+            onAudit={onAudit}
             state={state}
             volume={volume}
             lowBand={lowBand}

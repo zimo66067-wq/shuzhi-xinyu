@@ -11,6 +11,7 @@ import os
 import re
 
 from llm_client import call_llm
+from experiment.audit import local as audit_local
 
 # ── 配置项 ──────────────────────────────────────────────────────────────
 
@@ -359,11 +360,13 @@ def chat(messages, scenario: str | None = None) -> dict:
     """
     cleaned = _validate_messages(messages)
     if not cleaned:
+        audit_local("local_fallback", "no_valid_messages")
         return {"reply": "你好。我在这里。"}
 
     # 中危 #11：最后一条若是被拦截的 user 注入，直接温和拒绝
     last = cleaned[-1]
     if last.get("role") == "user" and last.get("_blocked"):
+        audit_local("local_intercept", "prompt_injection_rule")
         return {
             "reply": "我们就聊聊你今天的事吧。",
             "stage": None,
@@ -373,6 +376,7 @@ def chat(messages, scenario: str | None = None) -> dict:
     # 过滤掉被标记的注入条目，再继续
     cleaned = [{"role": m["role"], "content": m["content"]} for m in cleaned if not m.get("_blocked")]
     if not cleaned:
+        audit_local("local_fallback", "no_messages_after_filter")
         return {"reply": "你好。我在这里。"}
 
     # 任务 3：在截断前从原始 cleaned 抽年龄（system 在最前易被截掉）
