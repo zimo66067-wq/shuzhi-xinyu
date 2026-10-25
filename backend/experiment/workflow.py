@@ -10,6 +10,7 @@ import time
 from werkzeug.security import check_password_hash, generate_password_hash
 from .audit import canonical, sha, uid, redact
 from .store import Store
+from llm_client import get_model_config, REQUEST_TIMEOUT
 
 class Rejected(Exception):
     def __init__(self, message, status=400):
@@ -32,8 +33,8 @@ def snapshot():
     prompts = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted((root/'backend/prompts').glob('*.txt'))}
     # Actual llm_client constants; identity is intentionally absent from prompt config.
     return {'software_commit': version, 'working_tree_dirty': dirty,
-            'llm': {'provider':'deepseek','model':'deepseek-chat','temperature':0.8,'max_tokens':500,
-                    'timeout_seconds':25,'automatic_retries':0,'stream':False,
+            'llm': {'provider':'deepseek', **get_model_config(),
+                    'timeout_seconds':REQUEST_TIMEOUT,'automatic_retries':0,'stream':False,
                     'endpoint':'https://api.deepseek.com/chat/completions'},
             'prompts_sha256':prompts, 'chat_history_window':20, 'max_user_chars':500,
             'admission_mode':os.environ.get('EXPERIMENT_HUMAN_VERIFICATION','supervised'),
