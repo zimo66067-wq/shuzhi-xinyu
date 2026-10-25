@@ -73,7 +73,8 @@ class Workflow:
             row = db.execute('SELECT * FROM users WHERE username=? AND enabled=1',(username,)).fetchone()
             # Perform the same expensive operation for missing users.
             fallback = generate_password_hash('no-such-user-password') if not row else row['password_hash']
-            if not check_password_hash(fallback,password):
+            verified=check_password_hash(fallback,password)
+            if not row or not verified:
                 self.reject(db,'invalid_credentials',401,user=row['id'] if row else None)
             token = secrets.token_urlsafe(40)
             now = time.time()
@@ -130,7 +131,7 @@ class Workflow:
             raise Rejected('invalid_nonce_scope')
         if not self.store.rate(db,'nonce:'+user['id'],120,60):
             self.reject(db,'nonce_rate_limit',429,user=user['id'],session=s['id'])
-        if db.execute("SELECT 1 FROM turns WHERE session_id=? AND status='running'",(s['id'],)).fetchone():
+        if scope!='ui' and db.execute("SELECT 1 FROM turns WHERE session_id=? AND status='running'",(s['id'],)).fetchone():
             self.reject(db,'concurrent_turn',409,user=user['id'],session=s['id'])
         token, now = secrets.token_urlsafe(40), time.time()
         db.execute('INSERT INTO nonces VALUES(?,?,?,?,?,?,?,NULL)',

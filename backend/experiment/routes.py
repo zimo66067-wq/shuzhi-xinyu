@@ -117,6 +117,7 @@ def install(app, limiter=None):
             if kind not in ('formal','pilot','automated') or not isinstance(d.get('name'),str) or not 1<=len(d['name'])<=100: raise Rejected('invalid_batch')
             if kind=='automated' and not app.testing: raise Rejected('automated_batch_only_in_test_app',409)
             if app.testing and kind=='formal': raise Rejected('tests_cannot_create_formal_records',409)
+            if os.environ.get('EXPERIMENT_ENV')=='formal' and kind!='formal': raise Rejected('nonformal_records_forbidden_in_formal_environment',409)
             if kind=='formal': w.formal_gate()
             conf=snapshot(); ident=audit.uid()
             db.execute('INSERT INTO batches VALUES(?,?,?,?,?,?,?,?)',(ident,d['name'],kind,'draft',audit.canonical(conf),audit.sha(conf),0,time.time()))
@@ -141,6 +142,7 @@ def install(app, limiter=None):
             codes={f'{a}{i:02d}' for a in 'ABCD' for i in range(1,11)}
             if {c.get('code') for c in records if isinstance(c,dict)}!=codes: raise Rejected('case_codes_must_be_A01_to_D10')
             if d.get('confirmed') is not True: raise Rejected('protocol_confirmation_required')
+            records=sorted([{**c,'status':'planned'} for c in records],key=lambda c:c['code'])
             for c in records:
                 if c.get('category')!=c['code'][0] or not all(c.get(k) for k in ('target','preconditions','steps','expected','scoring','call_requirement')): raise Rejected('incomplete_case')
                 if not isinstance(c['steps'],list) or not all(isinstance(x,str) for x in c['steps']): raise Rejected('steps_required')
@@ -288,7 +290,6 @@ def install(app, limiter=None):
             t=db.execute("SELECT * FROM turns WHERE session_id=? AND status='running'",(sid,)).fetchone()
             # Never steal an actively running upstream request. Worker timeout is 60s.
             if not t or time.time()-t['created']<120 or not d.get('reason'): raise Rejected('stale_request_and_reason_required',409)
-            trace=audit.Trace(lambda *args: None)
             sends=[json.loads(r['data']) for r in db.execute("SELECT data FROM events WHERE turn_id=? AND kind='provider_send'",(t['id'],))]
             output={'reply':'本轮执行中断，原始证据已保留，请管理员复核。'}
             w.store.event(db,'interrupted',{'reason':d['reason'],'upstream_outcome':'unknown_do_not_auto_retry'},actor=u['id'],batch=s['batch_id'],session=sid,turn=t['id'])
@@ -321,6 +322,7 @@ def install(app, limiter=None):
     @bp.post('/sessions/<sid>/ratings')
     def rate(sid):
         d=body(); dims={'T','R','U','S','E'}
+        if audit.redact(d)!=d: raise Rejected('sensitive_data_not_allowed')
         if set(d)-{'scores','basis','evidence_refs','evaluation','metrics'} or not isinstance(d.get('scores'),dict) or set(d['scores'])!=dims or any(v is not None and (type(v) is not int or v not in (0,1,2)) for v in d['scores'].values()) or not d.get('basis') or not d.get('evidence_refs') or d.get('evaluation') not in ('evaluable','insufficient_evidence','not_implemented','not_executed'): raise Rejected('complete_independent_rating_required')
         validate_metrics(d.get('metrics',{}))
         with w.store.tx() as db:
@@ -335,6 +337,7 @@ def install(app, limiter=None):
     @bp.post('/sessions/<sid>/review')
     def review(sid):
         d=body(); validate_metrics(d.get('metrics',{}))
+        if set(d)-{'reason','evidence_refs','scores','metrics'} or audit.redact(d)!=d: raise Rejected('invalid_review_fields')
         if not isinstance(d.get('reason'),str) or not d['reason'].strip() or not d.get('evidence_refs'): raise Rejected('review_basis_required')
         scores=d.get('scores')
         if not isinstance(scores,dict) or set(scores)!={'T','R','U','S','E'} or any(v is not None and (type(v) is not int or v not in (0,1,2)) for v in scores.values()): raise Rejected('final_scores_required')
@@ -390,7 +393,7 @@ def install(app, limiter=None):
             else:
                 from ai_service import chat
                 trace=audit.Trace(w.store.emit(actor=u['id'],batch=s['batch_id'],session=sid,turn=t['id']),
-                                  mode='LIVE' if s['batch_kind']!='automated' else 'MOCK')
+                                  mode='LIVE' if s['batch_kind']!='automated' and not app.testing else 'MOCK')
                 start=time.monotonic()
                 with audit.tracing(trace):
                     result=chat(w.messages(s,body()['text']),scenario=body().get('scenario','supermarket'))
@@ -466,6 +469,18 @@ def summarize(db,bid):
                        'status':'reviewed_human_evidence' if denominator else 'unable_to_evaluate',
                        'formula':'sum(adjudicated_numerator)/sum(adjudicated_applicable_denominator)'}
     agreement={'equal':0,'applicable':0,'disagreements':[]}
+    must_call={'executed':0,'upstream_success':0,'with_server_and_ui_evidence':0,'with_recording_index_and_attestation':0}
+    for t in turns:
+        ev=[dict(r) for r in db.execute('SELECT kind,data FROM events WHERE turn_id=?',(t['id'],))]
+        entry=next((json.loads(r['data']) for r in ev if r['kind']=='backend_recv'),{})
+        if entry.get('expected_call')!='MUST_CALL': continue
+        must_call['executed']+=1
+        if t['source']!='deepseek_api': continue
+        must_call['upstream_success']+=1
+        if not {'provider_send','provider_result','business_response','ui_render'}.issubset({r['kind'] for r in ev}): continue
+        must_call['with_server_and_ui_evidence']+=1
+        observations=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM observations WHERE session_id=?',(t['session_id'],))]
+        if any(o.get('manual_declaration') is True and o.get('evidence') for o in observations): must_call['with_recording_index_and_attestation']+=1
     for s in sessions:
         ratings=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM ratings WHERE session_id=?',(s['id'],))]
         if len(ratings)!=2: continue
@@ -482,7 +497,9 @@ def summarize(db,bid):
             'sources':{source:sum(t['source']==source for t in turns) for source in ('deepseek_api','local_intercept','local_fallback','cache','mock','api_error','unknown')},
             'invalid_turns':sum(t['session_id'] in {s['id'] for s in sessions if s['state']=='invalid'} for t in turns),
             'metrics':metrics,'rater_agreement':agreement,
-            'must_call_evidence_rate':None,'must_call_evidence_note':'Conditional per-turn requirements require protocol review; never infer all chat turns are MUST_CALL.'}
+            'must_call':must_call,
+            'must_call_server_evidence_rate':must_call['with_server_and_ui_evidence']/must_call['executed'] if must_call['executed'] else None,
+            'must_call_evidence_note':'Server/UI/index counts are evidence availability, not independent authentication; CONDITIONAL turns need manual review. Invalid sessions remain in raw counts and are reported separately.'}
 
 
 def export_zip(w,bid):

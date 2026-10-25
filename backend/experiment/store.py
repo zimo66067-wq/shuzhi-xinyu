@@ -149,15 +149,35 @@ CREATE TRIGGER IF NOT EXISTS turn_no_delete BEFORE DELETE ON turns
             if turn['completed'] and (turn['completed'] < turn['created'] or turn['elapsed_ms'] < 0): err('invalid_time')
             if len({x['attempt_id'] for x in sends}) != len(sends): err('duplicate_attempt_id')
             if len(sends) != len(data): err('incomplete_upstream_attempt')
+            if {x['attempt_id'] for x in sends}!={x['attempt_id'] for x in data}: err('attempt_pairing_mismatch')
+            if turn['attempts']:
+                saved=json.loads(turn['attempts'])
+                if len(saved)!=len(sends): err('attempt_summary_count_mismatch')
+                for item in saved:
+                    for refkey,kind in (('request_evidence','provider_send'),('response_evidence','provider_result')):
+                        ref=item.get(refkey)
+                        evidence=next((e for e in ev if ref and e['id']==ref.get('event_id') and e['kind']==kind),None)
+                        if not evidence or sha(json.loads(evidence['data']))!=ref.get('sha256'): err('broken_evidence_reference')
             batch_row = db.execute('SELECT * FROM batches WHERE id=?', (turn['batch_id'],)).fetchone()
             config = json.loads(batch_row['config'])
             for send in sends:
                 p = send['payload']
                 if any(p.get(k) != config['llm'][k] for k in ('model', 'temperature', 'max_tokens')): err('config_mismatch')
+            for result in data:
+                if result['status']=='success' and not (result.get('http_status') and 200<=result['http_status']<300): err('success_with_invalid_http_status')
+                if result.get('elapsed_ms') is not None and result['elapsed_ms']<0: err('invalid_attempt_elapsed_time')
+                if result.get('model_returned') and result['model_returned']!=config['llm']['model']: err('returned_model_differs_requires_review')
+                if result.get('ended_at') and not any(x['attempt_id']==result['attempt_id'] and x['started_at']<=result['ended_at'] for x in sends): err('attempt_time_mismatch')
             if turn['status'] != 'running':
                 finals = [json.loads(e['data']) for e in ev if e['kind']=='business_response']
                 if len(finals)!=1 or finals[0].get('output')!=json.loads(turn['output']): err('business_output_mismatch')
                 acks = [json.loads(e['data']) for e in ev if e['kind']=='ui_render']
                 if not acks: err('missing_ui_render_ack')
+        batches=db.execute('SELECT * FROM batches' + (' WHERE id=?' if batch else ''),(batch,) if batch else ()).fetchall()
+        for b in batches:
+            if sha(json.loads(b['config']))!=b['config_hash']: errors.append({'batch_id':b['id'],'error':'config_hash_mismatch'})
+            protocol=db.execute("SELECT data FROM events WHERE batch_id=? AND kind='protocol_confirmed'",(b['id'],)).fetchone()
+            records=[json.loads(r['payload']) for r in db.execute('SELECT payload FROM cases WHERE batch_id=? ORDER BY code',(b['id'],))]
+            if protocol and sha(records)!=json.loads(protocol['data'])['cases_sha256']: errors.append({'batch_id':b['id'],'error':'protocol_hash_mismatch'})
         return {'ok': not errors, 'errors': errors, 'events_checked': total, 'turns_checked': len(turns),
                 'chain_head': prev, 'proof_scope': 'server_records_only_not_provider_or_human_proof'}
