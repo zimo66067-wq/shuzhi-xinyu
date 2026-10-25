@@ -2,7 +2,7 @@
 llm_client.py — LLM 调用层（DeepSeek 单一）
 
 设计要点：
-  - 单一 LLM：DeepSeek `deepseek-chat`（V3 对话模型）
+  - 单一 LLM：DeepSeek V4.1 Flash (`deepseek-flash`)，可选择 `deepseek-v4-pro`
   - 请求超时 25s（< Flask worker 默认 30s，留余地）
   - 失败永不抛异常：返回兜底字符串 FALLBACK_REPLY，由上层决定是否提示用户
   - 调用源通过 get_last_source() 暴露给运维（"deepseek" / "fallback" / "none"）
@@ -24,6 +24,20 @@ from experiment import audit
 
 # 略短于 Flask worker 默认超时（30s），给应用层留余地
 REQUEST_TIMEOUT = 25
+SUPPORTED_MODELS = {"deepseek-flash", "deepseek-v4-pro"}
+
+
+def get_model_config() -> dict:
+    """返回实际用于请求和实验冻结的配置；不含 API 密钥。"""
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash").strip()
+    if model not in SUPPORTED_MODELS:
+        raise ValueError("DEEPSEEK_MODEL must be deepseek-flash or deepseek-v4-pro")
+    return {
+        "model": model,
+        "thinking": {"type": "disabled"},
+        "temperature": 0.8,
+        "max_tokens": 500,
+    }
 
 # 兜底字符串单独定义，方便上层识别
 FALLBACK_REPLY = "我现在遇到一些问题，稍后再试试吧。"
@@ -42,11 +56,11 @@ def get_last_source() -> str:
 def call_deepseek(
     system_prompt: str,
     messages: list[dict],
-    model: str = "deepseek-chat",
+    model: str | None = None,
 ) -> str:
     """
     调用 DeepSeek Chat Completions API。
-    默认 model=deepseek-chat（V3 对话模型）。
+    默认 model=deepseek-flash（DeepSeek V4.1 Flash，非思考模式）。
     """
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
@@ -54,12 +68,12 @@ def call_deepseek(
 
     full_messages = [{"role": "system", "content": system_prompt}] + messages
 
-    payload = {
-            "model": model,
-            "messages": full_messages,
-            "temperature": 0.8,
-            "max_tokens": 500,
-    }
+    payload = get_model_config()
+    if model is not None:
+        if model not in SUPPORTED_MODELS:
+            raise ValueError("unsupported DeepSeek model")
+        payload["model"] = model
+    payload["messages"] = full_messages
     endpoint = "https://api.deepseek.com/chat/completions"
     attempt = audit.dispatch(payload, endpoint)
     if attempt is not None:
