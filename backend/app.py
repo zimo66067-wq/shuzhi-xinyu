@@ -562,6 +562,10 @@ def health():
     return jsonify({"status": "ok"})
 
 
+# 独立实验功能默认关闭；复用既有对话/语音业务，不改变普通请求契约。
+from experiment.routes import install as install_experiment
+install_experiment(app, limiter)
+
 # ── 启动 ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
