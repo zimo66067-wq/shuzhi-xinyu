@@ -61,7 +61,10 @@ class Store:
         self.path = str(Path(path).resolve())
         Path(self.path).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.connect() as db:
+            version=db.execute('PRAGMA user_version').fetchone()[0]
+            if version>1: raise ValueError('newer experiment schema: refusing automatic changes')
             db.executescript(SCHEMA)
+            db.execute('PRAGMA user_version=1')
             for table in APPEND_ONLY:
                 for op in ('UPDATE', 'DELETE'):
                     db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{table}_{op} BEFORE {op} ON {table} "

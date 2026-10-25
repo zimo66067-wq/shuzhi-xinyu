@@ -21,6 +21,7 @@ export function experimentClient(auth, sessionId) {
   }
   const sessionPath = `/sessions/${sessionId}`
   const requestHeaders = async (scope) => {
+    if (scope !== 'ui') await eventQueue
     const token = await call(`${sessionPath}/nonce`, 'POST', { scope })
     return { ...headers(), 'X-Experiment-Session': sessionId, 'X-Experiment-Nonce': token.nonce }
   }
@@ -35,6 +36,7 @@ export function experimentClient(auth, sessionId) {
     return eventQueue
   }
   const send = async (text, scenario, modality = 'text') => {
+    await eventQueue
     const key = `xy_experiment_pending:${sessionId}`
     const payload = { text, modality, scenario }
     let pending

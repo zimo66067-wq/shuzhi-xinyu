@@ -4,6 +4,7 @@ import getpass
 import os
 from pathlib import Path
 import sqlite3
+import json
 from werkzeug.security import generate_password_hash
 from .store import Store
 from .audit import uid
@@ -11,7 +12,7 @@ from .audit import uid
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('command',choices=['bootstrap','backup','check-backup'])
+    p.add_argument('command',choices=['bootstrap','backup','check-backup','verify'])
     p.add_argument('--db',default=os.environ.get('EXPERIMENT_DB'))
     p.add_argument('--username',default='captain')
     p.add_argument('--output')
@@ -35,6 +36,12 @@ def main():
         source.backup(target); target.close(); source.close()
         os.chmod(args.output,0o600)
         print('Consistent SQLite backup saved. Store a copy and its hash on independent storage.')
+    elif args.command=='verify':
+        if not Path(args.db).is_file(): p.error('database does not exist')
+        store=Store(args.db)
+        with store.tx(read=True) as db: result=store.verify(db)
+        print(json.dumps(result,ensure_ascii=False,indent=2))
+        if not result['ok']: raise SystemExit(1)
     else:
         db=sqlite3.connect(f'file:{Path(args.db).resolve()}?mode=ro',uri=True)
         print('SQLite integrity:',db.execute('PRAGMA integrity_check').fetchone()[0]); db.close()

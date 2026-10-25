@@ -145,6 +145,7 @@ def install(app, limiter=None):
             records=sorted([{**c,'status':'planned'} for c in records],key=lambda c:c['code'])
             for c in records:
                 if c.get('category')!=c['code'][0] or not all(c.get(k) for k in ('target','preconditions','steps','expected','scoring','call_requirement')): raise Rejected('incomplete_case')
+                if c.get('chat_call_policy','CONDITIONAL') not in ('MUST_CALL','CONDITIONAL','NO_CALL_EXPECTED'): raise Rejected('invalid_call_policy')
                 if not isinstance(c['steps'],list) or not all(isinstance(x,str) for x in c['steps']): raise Rejected('steps_required')
             for c in records:
                 db.execute('INSERT INTO cases VALUES(?,?,?,?,?)',(audit.uid(),bid,c['code'],c['category'],audit.canonical({**c,'status':'planned'})))
@@ -230,11 +231,14 @@ def install(app, limiter=None):
                 secret=os.environ.get('TURNSTILE_SECRET_KEY'); hostnames=os.environ.get('TURNSTILE_HOSTNAMES','').split(',')
                 token=d.get('turnstile_token')
                 if not secret or not any(hostnames) or not isinstance(token,str) or not 1<=len(token)<=2048: raise Rejected('verification_not_configured_or_missing',503)
+                if not w.store.rate(db,'verification:'+u['id'],10,600): w.reject(db,'verification_rate_limit',429,user=u['id'],session=sid)
                 try:
-                    result=requests.post('https://challenges.cloudflare.com/turnstile/v0/siteverify',data={'secret':secret,'response':token},timeout=8).json()
+                    verification=requests.post('https://challenges.cloudflare.com/turnstile/v0/siteverify',data={'secret':secret,'response':token},timeout=8)
+                    verification.raise_for_status()
+                    result=verification.json()
                 except (requests.RequestException,ValueError):
                     w.reject(db,'verification_unavailable',503,user=u['id'],session=sid)
-                if not result.get('success') or result.get('hostname') not in hostnames or result.get('action')!='experiment_admit': w.reject(db,'verification_failed',403,user=u['id'],session=sid)
+                if not isinstance(result,dict) or result.get('success') is not True or result.get('hostname') not in hostnames or result.get('action')!='experiment_admit': w.reject(db,'verification_failed',403,user=u['id'],session=sid)
                 evidence={'mode':mode,'hostname':result.get('hostname'),'action':result.get('action'),'challenge_ts':result.get('challenge_ts'),'claim':'challenge_passed_not_human_proof'}
             else: raise Rejected('verification_mode_invalid',503)
             state='ready' if s['state']=='assigned' else s['state']
@@ -358,6 +362,12 @@ def install(app, limiter=None):
             if not d.get('reason') or not db.execute("SELECT 1 FROM events WHERE id=? AND kind='risk'",(eid,)).fetchone(): raise Rejected('risk_and_review_reason_required')
             event(db,'risk_review',{'event_id':eid,'reason':d['reason']},u)
         return jsonify(ok=True)
+
+    @bp.get('/risks')
+    def all_risks():
+        with w.store.tx() as db:
+            actor(db,True)
+            return jsonify(risks=[dict(r) for r in db.execute("SELECT * FROM events WHERE kind IN ('risk','risk_review') ORDER BY seq DESC LIMIT 1000")])
 
     @bp.get('/batches/<bid>/verify')
     def verify(bid):

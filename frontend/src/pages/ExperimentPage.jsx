@@ -104,7 +104,7 @@ export default function ExperimentPage() {
   return <main className="experiment-shell" aria-busy={busy}>
     <header><h1>数智心屿科研实验</h1><p>{auth.user.username} · {admin ? '实验管理员' : '执行与评分账号'}</p>
       <div className="experiment-row"><button onClick={() => run(refresh)} disabled={busy}>刷新记录</button>
-        <button onClick={async () => { try { await client.call('/logout', 'POST', {}) } finally { saveExperimentAuth(null); setAuth(null); setSelected(null) } }}>退出实验账号</button></div></header>
+        <button onClick={async () => { try { await client.call('/logout', 'POST', {}) } catch { /* expired sessions still clear local credentials */ } finally { saveExperimentAuth(null); setAuth(null); setSelected(null) } }}>退出实验账号</button></div></header>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     <p>验证码和服务端日志均不能单独证明真人或提供商独立认证。自动测试、试运行与正式批次分开统计。</p>
     {admin && <section><h2>批次与账号</h2>
@@ -127,8 +127,10 @@ export default function ExperimentPage() {
           <button disabled={busy} onClick={() => run(() => client.call(`/batches/${batchId}`, 'PATCH', { state: 'stopped', reason }))}>停止批次</button>
           <button disabled={busy} onClick={() => run(async () => setAuditResult(await client.call(`/batches/${batchId}/summary`)))}>统计与分歧</button>
           <button disabled={busy} onClick={() => run(async () => setAuditResult(await client.call(`/batches/${batchId}/verify`)))}>核验完整性</button>
+          <button disabled={busy} onClick={() => run(async () => setAuditResult(await client.call('/risks')))}>异常登录与自动化风险</button>
           <button disabled={busy} onClick={() => run(() => client.download(batchId))}>导出受控证据包</button></div>
-        {auditResult && <pre>{pretty(auditResult)}</pre>}</>}
+        {auditResult && <pre>{pretty(auditResult)}</pre>}
+        {auditResult?.risks?.filter((ev) => ev.kind === 'risk').map((ev) => <div key={ev.id}><span>{ev.id} · {parse(ev.data).reason}</span><button onClick={() => run(() => client.call(`/risks/${ev.id}/review`, 'POST', { reason }))}>按当前原因追加复核</button></div>)}</>}
     </section>}
     <section><h2>会话进度</h2><p>可见 {sessions.filter((s) => !batchId || s.batch_id === batchId).length} 个会话；实际轮次及调用次数在批次统计中单列。</p>
       <div className="experiment-table"><table><thead><tr><th>批次</th><th>用例</th><th>执行员</th><th>状态</th><th>轮次</th><th>操作</th></tr></thead><tbody>
