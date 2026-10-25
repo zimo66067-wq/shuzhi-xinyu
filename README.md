@@ -35,7 +35,7 @@
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| AI 对话（DeepSeek `deepseek-chat`） | ✅ 已实现 | 单一模型，无第三方降级；后端 `llm_client.py` 失败时返回温和兜底字符串 |
+| AI 对话（DeepSeek `deepseek-flash`） | ✅ 已实现 | 单一模型，无第三方降级；后端 `llm_client.py` 失败时返回温和兜底字符串 |
 | TTS 语音输出（腾讯云） | ✅ 已实现 | 腾讯云 TTS（智莉音色 101005）；心屿回复后自动播放；Web Speech 仅作离线兜底 |
 | STT 语音输入（腾讯云 ASR） | ✅ 已实现 | 长按麦克风录音（`usePushToTalk`）→ webm → 后端 ffmpeg 转码 → 腾讯云一句话识别 |
 | 3D 数字人 心屿（VRM 1.0） | ✅ 已实现 | `@pixiv/three-vrm` 加载 `/models/xinyu.vrm`；自动眨眼、浮动、双臂自然站姿 |
@@ -59,7 +59,7 @@
 | 前端 | Vite + React 18 | 5173 |
 | 3D | Three.js + @react-three/fiber + @react-three/drei + @pixiv/three-vrm | - |
 | 后端 | Python Flask + flask-cors + flask-limiter | 5000 |
-| 对话/评分模型 | DeepSeek `deepseek-chat`（V3） | - |
+| 对话/评分模型 | DeepSeek `deepseek-flash`（V4.1 Flash，非思考模式） | - |
 | 语音合成 / 识别 | 腾讯云 TTS（智莉 101005）+ ASR（16k_zh 一句话识别） | - |
 | 音频转码 | ffmpeg（pydub + imageio-ffmpeg） | - |
 | 声学分析 | Web Audio API（AnalyserNode + 自相关基频） | - |
