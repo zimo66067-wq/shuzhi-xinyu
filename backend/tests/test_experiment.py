@@ -17,7 +17,7 @@ import llm_client
 def upstream(monkeypatch):
     response=Mock()
     response.status_code=200; response.headers={'x-request-id':'SYNTHETIC-QA-REQUEST'}
-    body={'id':'SYNTHETIC-QA-COMPLETION','model':'deepseek-chat','usage':{'prompt_tokens':10,'completion_tokens':6,'total_tokens':16},'choices':[{'message':{'content':'你好。面包五元。[SCENE:ask_price]'},'finish_reason':'stop'}]}
+    body={'id':'SYNTHETIC-QA-COMPLETION','model':'deepseek-flash','usage':{'prompt_tokens':10,'completion_tokens':6,'total_tokens':16},'choices':[{'message':{'content':'你好。面包五元。[SCENE:ask_price]'},'finish_reason':'stop'}]}
     response.json.return_value=body; response.text=json.dumps(body,ensure_ascii=False)
     response.raise_for_status.return_value=None
     post=Mock(return_value=response)
