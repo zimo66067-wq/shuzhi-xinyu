@@ -153,7 +153,7 @@ class PostgresStore(Store):
             # Send one statement per execute; psycopg's extended protocol
             # cannot prepare multiple statements in one command. Split only
             # at a CREATE statement boundary (never inside PL/pgSQL bodies).
-            for statement in re.split(r";\\s*\\n(?=CREATE )", SCHEMA.strip()):
+            for statement in re.split(r";\s*\n(?=CREATE )", SCHEMA.strip()):
                 db.raw.execute(statement.strip().rstrip(";") + ";")
             db.execute("""INSERT INTO experiment_meta(key,value) VALUES('schema_version','1')
                 ON CONFLICT(key) DO NOTHING""")
