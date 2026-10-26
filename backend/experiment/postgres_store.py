@@ -123,8 +123,9 @@ class CompatConnection:
 
     def execute(self, sql, parameters=()):
         # Application's existing SQL has ? placeholders, not JSON operators.
-        return self.raw.execute(sql.replace('?', '%s'), parameters,
-                                row_factory=compat_row_factory)
+        cursor = self.raw.cursor(row_factory=compat_row_factory)
+        cursor.execute(sql.replace('?', '%s'), parameters)
+        return cursor
 
     def commit(self):
         self.raw.commit()
