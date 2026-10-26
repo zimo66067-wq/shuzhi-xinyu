@@ -170,7 +170,7 @@ WHERE tgname='{trigger}' AND tgrelid='{table}'::regclass) THEN
   CREATE TRIGGER {trigger} BEFORE {action} ON {table}
    FOR EACH ROW EXECUTE FUNCTION experiment_raise_immutable();
  END IF;
-END
+END;
 $do$""")
             db.raw.execute("""DO $do$
 BEGIN
@@ -184,7 +184,7 @@ WHERE tgname='turn_no_delete' AND tgrelid='turns'::regclass) THEN
   CREATE TRIGGER turn_no_delete BEFORE DELETE ON turns
    FOR EACH ROW EXECUTE FUNCTION experiment_raise_immutable();
  END IF;
-END
+END;
 $do$""")
             db.commit()
         except BaseException:
