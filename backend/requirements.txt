@@ -24,3 +24,6 @@ audioop-lts>=0.2; python_version >= "3.13"
 
 # 生产 WSGI 服务器（部署时用 gunicorn，开发不必须）
 gunicorn>=21.2; sys_platform != "win32"
+
+# 独立科研实验持久化：Neon PostgreSQL（仅设置 EXPERIMENT_DATABASE_URL 时启用）
+psycopg[binary]>=3.2,<4

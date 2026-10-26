@@ -10,6 +10,7 @@ import time
 from werkzeug.security import check_password_hash, generate_password_hash
 from .audit import canonical, sha, uid, redact
 from .store import Store
+from .store_pg import PgStore
 from llm_client import get_model_config, REQUEST_TIMEOUT
 
 class Rejected(Exception):
@@ -23,7 +24,7 @@ def digest(text):
 
 def snapshot():
     root = Path(__file__).resolve().parents[2]
-    version = os.environ.get('EXPERIMENT_SOFTWARE_COMMIT', '')
+    version = os.environ.get('EXPERIMENT_SOFTWARE_COMMIT') or os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
     dirty = None
     try:
         version = subprocess.check_output(['git','rev-parse','HEAD'], cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
@@ -44,10 +45,14 @@ def snapshot():
 class Workflow:
     def __init__(self, app):
         self.app = app
-        path = app.config.get('EXPERIMENT_DB') or os.environ.get('EXPERIMENT_DB')
-        if not path or path == ':memory:':
-            raise ValueError('EXPERIMENT_DB must be an explicit file path')
-        self.store = Store(path)
+        postgres_url = app.config.get('EXPERIMENT_DATABASE_URL') or os.environ.get('EXPERIMENT_DATABASE_URL')
+        if postgres_url:
+            self.store = PgStore(postgres_url)
+        else:
+            path = app.config.get('EXPERIMENT_DB') or os.environ.get('EXPERIMENT_DB')
+            if not path or path == ':memory:':
+                raise ValueError('Set EXPERIMENT_DATABASE_URL (PostgreSQL) or a persistent EXPERIMENT_DB path')
+            self.store = Store(path)
 
     def reject(self, db, message, status=400, user=None, session=None, batch=None):
         self.store.event(db, 'risk', {'reason':message}, actor=user or 'anonymous', session=session, batch=batch)
@@ -110,16 +115,25 @@ class Workflow:
             self.formal_gate()
 
     def formal_gate(self):
-        p = Path(self.store.path).resolve()
-        mount = Path(os.environ.get('EXPERIMENT_DURABLE_ROOT','/nonexistent')).resolve()
-        if self.app.testing or os.environ.get('EXPERIMENT_ENV')!='formal':
+        if self.app.testing or os.environ.get('EXPERIMENT_ENV') != 'formal':
             raise Rejected('formal_environment_required',409)
-        if os.environ.get('VERCEL') or str(p).startswith(('/tmp/','/var/tmp/','/dev/shm/')):
-            raise Rejected('ephemeral_storage_forbidden',409)
-        if os.environ.get('EXPERIMENT_STORAGE_ACK')!='persistent-single-host' or not mount.is_dir() or not p.is_relative_to(mount):
-            raise Rejected('persistent_volume_confirmation_required',409)
-        if os.environ.get('EXPERIMENT_REPLICAS','1')!='1':
-            raise Rejected('sqlite_multi_host_not_supported',409)
+        if isinstance(self.store, PgStore):
+            # A serverless host may run multiple workers only with durable PostgreSQL.
+            if os.environ.get('EXPERIMENT_STORAGE_ACK') != 'neon-postgres-verified':
+                raise Rejected('postgres_storage_attestation_required',409)
+            try:
+                self.store.storage_probe()
+            except Exception:
+                raise Rejected('postgres_storage_probe_failed',503) from None
+        else:
+            p = Path(self.store.path).resolve()
+            mount = Path(os.environ.get('EXPERIMENT_DURABLE_ROOT','/nonexistent')).resolve()
+            if os.environ.get('VERCEL') or str(p).startswith(('/tmp/','/var/tmp/','/dev/shm/')):
+                raise Rejected('ephemeral_storage_forbidden',409)
+            if os.environ.get('EXPERIMENT_STORAGE_ACK')!='persistent-single-host' or not mount.is_dir() or not p.is_relative_to(mount):
+                raise Rejected('persistent_volume_confirmation_required',409)
+            if os.environ.get('EXPERIMENT_REPLICAS','1')!='1':
+                raise Rejected('sqlite_multi_host_not_supported',409)
         if not os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('DEEPSEEK_API_KEY','').startswith('sk-your-'):
             raise Rejected('live_key_not_configured',409)
         conf = snapshot()
