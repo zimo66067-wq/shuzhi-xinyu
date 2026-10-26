@@ -13,6 +13,9 @@ PASSWORD_HASH=generate_password_hash(PASSWORD)
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
+    # SQLite contract tests must not accidentally write to any linked Neon database.
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.delenv('EXPERIMENT_DATABASE_URL', raising=False)
     monkeypatch.setenv('EXPERIMENT_ENABLED','1')
     monkeypatch.setenv('EXPERIMENT_DB',str(tmp_path/'qa.sqlite3'))
     monkeypatch.setenv('EXPERIMENT_ENV','automated')
