@@ -10,6 +10,7 @@ import time
 from werkzeug.security import check_password_hash, generate_password_hash
 from .audit import canonical, sha, uid, redact
 from .store import Store
+from .postgres_store import PostgresStore
 from llm_client import get_model_config, REQUEST_TIMEOUT
 
 class Rejected(Exception):
@@ -23,7 +24,7 @@ def digest(text):
 
 def snapshot():
     root = Path(__file__).resolve().parents[2]
-    version = os.environ.get('EXPERIMENT_SOFTWARE_COMMIT', '')
+    version = os.environ.get('EXPERIMENT_SOFTWARE_COMMIT') or os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
     dirty = None
     try:
         version = subprocess.check_output(['git','rev-parse','HEAD'], cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
@@ -44,10 +45,14 @@ def snapshot():
 class Workflow:
     def __init__(self, app):
         self.app = app
-        path = app.config.get('EXPERIMENT_DB') or os.environ.get('EXPERIMENT_DB')
-        if not path or path == ':memory:':
-            raise ValueError('EXPERIMENT_DB must be an explicit file path')
-        self.store = Store(path)
+        dsn = app.config.get('EXPERIMENT_DATABASE_URL') or os.environ.get('EXPERIMENT_DATABASE_URL') or os.environ.get('DATABASE_URL')
+        if dsn:
+            self.store = PostgresStore(dsn)
+        else:
+            path = app.config.get('EXPERIMENT_DB') or os.environ.get('EXPERIMENT_DB')
+            if not path or path == ':memory:':
+                raise ValueError('EXPERIMENT_DB (SQLite) or DATABASE_URL (PostgreSQL) is required')
+            self.store = Store(path)
 
     def reject(self, db, message, status=400, user=None, session=None, batch=None):
         self.store.event(db, 'risk', {'reason':message}, actor=user or 'anonymous', session=session, batch=batch)
@@ -110,16 +115,22 @@ class Workflow:
             self.formal_gate()
 
     def formal_gate(self):
-        p = Path(self.store.path).resolve()
-        mount = Path(os.environ.get('EXPERIMENT_DURABLE_ROOT','/nonexistent')).resolve()
         if self.app.testing or os.environ.get('EXPERIMENT_ENV')!='formal':
             raise Rejected('formal_environment_required',409)
-        if os.environ.get('VERCEL') or str(p).startswith(('/tmp/','/var/tmp/','/dev/shm/')):
-            raise Rejected('ephemeral_storage_forbidden',409)
-        if os.environ.get('EXPERIMENT_STORAGE_ACK')!='persistent-single-host' or not mount.is_dir() or not p.is_relative_to(mount):
-            raise Rejected('persistent_volume_confirmation_required',409)
-        if os.environ.get('EXPERIMENT_REPLICAS','1')!='1':
-            raise Rejected('sqlite_multi_host_not_supported',409)
+        if getattr(self.store, 'backend', 'sqlite') == 'postgres':
+            # PostgreSQL permits multiple stateless Vercel function instances.
+            # These flags are human attestations, NOT independent proof of backups.
+            if os.environ.get('EXPERIMENT_PG_BACKUP_ACK')!='verified' or not os.environ.get('EXPERIMENT_PG_BACKUP_REF'):
+                raise Rejected('postgres_backup_verification_required',409)
+        else:
+            p = Path(self.store.path).resolve()
+            mount = Path(os.environ.get('EXPERIMENT_DURABLE_ROOT','/nonexistent')).resolve()
+            if os.environ.get('VERCEL') or str(p).startswith(('/tmp/','/var/tmp/','/dev/shm/')):
+                raise Rejected('ephemeral_storage_forbidden',409)
+            if os.environ.get('EXPERIMENT_STORAGE_ACK')!='persistent-single-host' or not mount.is_dir() or not p.is_relative_to(mount):
+                raise Rejected('persistent_volume_confirmation_required',409)
+            if os.environ.get('EXPERIMENT_REPLICAS','1')!='1':
+                raise Rejected('sqlite_multi_host_not_supported',409)
         if not os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('DEEPSEEK_API_KEY','').startswith('sk-your-'):
             raise Rejected('live_key_not_configured',409)
         conf = snapshot()
