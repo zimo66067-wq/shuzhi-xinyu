@@ -36,7 +36,9 @@ class Connection:
         # The existing experiment SQL uses SQLite positional placeholders only.
         # Don't apply string substitutions to user-provided values.
         query = query.replace('?', '%s')
-        return self._conn.execute(query, params)
+        # SQLite accepts booleans in integer columns; PostgreSQL does not.
+        safe_params = tuple(int(x) if isinstance(x, bool) else x for x in params)
+        return self._conn.execute(query, safe_params)
 
     def commit(self):
         return self._conn.commit()
