@@ -7,6 +7,7 @@ import sqlite3
 import json
 from werkzeug.security import generate_password_hash
 from .store import Store
+from .postgres_store import PostgresStore
 from .audit import uid
 
 
@@ -17,9 +18,12 @@ def main():
     p.add_argument('--username',default='captain')
     p.add_argument('--output')
     args=p.parse_args()
-    if not args.db: p.error('--db or EXPERIMENT_DB is required')
+    dsn = os.environ.get('EXPERIMENT_DATABASE_URL') or os.environ.get('DATABASE_URL')
+    if not args.db and not dsn: p.error('EXPERIMENT_DB or DATABASE_URL is required')
+    if dsn and args.command in ('backup','check-backup'):
+        p.error('PostgreSQL backup/check-backup must use external Neon point-in-time recovery or pg_dump; SQLite backup is not applicable')
     if args.command=='bootstrap':
-        store=Store(args.db)
+        store=PostgresStore(dsn) if dsn else Store(args.db)
         password=getpass.getpass('New administrator password (12+ chars): ')
         if not 12<=len(password)<=128: p.error('password length must be 12..128')
         if password!=getpass.getpass('Confirm: '): p.error('password confirmation mismatch')
@@ -37,8 +41,8 @@ def main():
         os.chmod(args.output,0o600)
         print('Consistent SQLite backup saved. Store a copy and its hash on independent storage.')
     elif args.command=='verify':
-        if not Path(args.db).is_file(): p.error('database does not exist')
-        store=Store(args.db)
+        if not dsn and not Path(args.db).is_file(): p.error('database does not exist')
+        store=PostgresStore(dsn) if dsn else Store(args.db)
         with store.tx(read=True) as db: result=store.verify(db)
         print(json.dumps(result,ensure_ascii=False,indent=2))
         if not result['ok']: raise SystemExit(1)
