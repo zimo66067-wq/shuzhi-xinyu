@@ -6,6 +6,7 @@ in returned JSON. A single transaction advisory lock deliberately serializes
 writes, preserving the original BEGIN IMMEDIATE semantics for small cohorts.
 """
 from contextlib import contextmanager
+import re
 import time
 import psycopg
 from .store import Store
@@ -149,9 +150,11 @@ class PostgresStore(Store):
         db = self.connect()
         try:
             db.execute('SELECT pg_advisory_xact_lock(%s)', (INIT_LOCK,))
-            # Send DDL in one PostgreSQL command. psycopg prepares
-            # only statements with bound params; this has no params.
-            db.raw.execute(SCHEMA)
+            # Send one statement per execute; psycopg's extended protocol
+            # cannot prepare multiple statements in one command. Split only
+            # at a CREATE statement boundary (never inside PL/pgSQL bodies).
+            for statement in re.split(r";\\s*\\n(?=CREATE )", SCHEMA.strip()):
+                db.raw.execute(statement.strip().rstrip(";") + ";")
             db.execute("""INSERT INTO experiment_meta(key,value) VALUES('schema_version','1')
                 ON CONFLICT(key) DO NOTHING""")
             ver = db.execute("SELECT value FROM experiment_meta WHERE key='schema_version'").fetchone()[0]
