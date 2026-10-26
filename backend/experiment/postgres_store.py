@@ -8,7 +8,6 @@ writes, preserving the original BEGIN IMMEDIATE semantics for small cohorts.
 from contextlib import contextmanager
 import time
 import psycopg
-from psycopg.rows import RowFactory
 from .store import Store
 
 SCHEMA = """
@@ -147,49 +146,49 @@ class PostgresStore(Store):
         # Never place credentials in self.path; this is read by a few
         # legacy SQLite-only formal/CLI code paths.
         self.path = 'postgresql-neon-experiment'
-        with self.connect() as db:
-            try:
-                db.execute('SELECT pg_advisory_xact_lock(%s)', (INIT_LOCK,))
-                # Send DDL in one PostgreSQL command. psycopg prepares
-                # only statements with bound params; this has no params.
-                db.raw.execute(SCHEMA)
-                db.execute("""INSERT INTO experiment_meta(key,value) VALUES('schema_version','1')
-                    ON CONFLICT(key) DO NOTHING""")
-                ver = db.execute("SELECT value FROM experiment_meta WHERE key='schema_version'").fetchone()[0]
-                if ver != '1':
-                    raise ValueError('Unsupported newer PostgreSQL experiment schema')
-                for table in IMMUTABLE_TABLES:
-                    for action in ('UPDATE', 'DELETE'):
-                        trigger = f'immutable_{table}_{action.lower()}'
-                        db.raw.execute(f"""DO $do$
+        db = self.connect()
+        try:
+            db.execute('SELECT pg_advisory_xact_lock(%s)', (INIT_LOCK,))
+            # Send DDL in one PostgreSQL command. psycopg prepares
+            # only statements with bound params; this has no params.
+            db.raw.execute(SCHEMA)
+            db.execute("""INSERT INTO experiment_meta(key,value) VALUES('schema_version','1')
+                ON CONFLICT(key) DO NOTHING""")
+            ver = db.execute("SELECT value FROM experiment_meta WHERE key='schema_version'").fetchone()[0]
+            if ver != '1':
+                raise ValueError('Unsupported newer PostgreSQL experiment schema')
+            for table in IMMUTABLE_TABLES:
+                for action in ('UPDATE', 'DELETE'):
+                    trigger = f'immutable_{table}_{action.lower()}'
+                    db.raw.execute(f"""DO $do$
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_trigger
-    WHERE tgname='{trigger}' AND tgrelid='{table}'::regclass) THEN
+WHERE tgname='{trigger}' AND tgrelid='{table}'::regclass) THEN
   CREATE TRIGGER {trigger} BEFORE {action} ON {table}
    FOR EACH ROW EXECUTE FUNCTION experiment_raise_immutable();
  END IF;
 END
 $do$""")
-                db.raw.execute("""DO $do$
+            db.raw.execute("""DO $do$
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_trigger
-    WHERE tgname='completed_turn_immutable' AND tgrelid='turns'::regclass) THEN
+WHERE tgname='completed_turn_immutable' AND tgrelid='turns'::regclass) THEN
   CREATE TRIGGER completed_turn_immutable BEFORE UPDATE ON turns
    FOR EACH ROW EXECUTE FUNCTION experiment_check_turn_mutation();
  END IF;
  IF NOT EXISTS (SELECT 1 FROM pg_trigger
-    WHERE tgname='turn_no_delete' AND tgrelid='turns'::regclass) THEN
+WHERE tgname='turn_no_delete' AND tgrelid='turns'::regclass) THEN
   CREATE TRIGGER turn_no_delete BEFORE DELETE ON turns
    FOR EACH ROW EXECUTE FUNCTION experiment_raise_immutable();
  END IF;
 END
 $do$""")
-                db.commit()
-            except BaseException:
-                db.rollback()
-                raise
-            finally:
-                db.close()
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def connect(self):
         # Neon pooler may close idle sessions: open a bounded connection for
