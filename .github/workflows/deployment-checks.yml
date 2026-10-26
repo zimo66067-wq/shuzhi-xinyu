@@ -84,6 +84,11 @@ jobs:
           assert response.get_json() == {'status': 'ok'}, f'Unexpected response: {response.get_data(as_text=True)}';
           print('Health check passed!')"
 
+      - name: Run isolated experiment adapter tests
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tests/test_experiment_pg_adapter.py tests/test_experiment.py
+
       - name: Verify parent auth flow
         run: >-
           python -c "from app import app;
