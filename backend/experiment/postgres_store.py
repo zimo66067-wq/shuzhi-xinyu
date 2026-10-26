@@ -124,7 +124,11 @@ class CompatConnection:
     def execute(self, sql, parameters=()):
         # Application's existing SQL has ? placeholders, not JSON operators.
         cursor = self.raw.cursor(row_factory=compat_row_factory)
-        cursor.execute(sql.replace('?', '%s'), parameters)
+        # SQLite's INTEGER affinity accepts Python bools as 0/1.
+        # PostgreSQL strictly rejects bool parameters in INTEGER fields.
+        compatible = tuple(int(value) if isinstance(value, bool) else value
+                           for value in parameters)
+        cursor.execute(sql.replace('?', '%s'), compatible)
         return cursor
 
     def commit(self):
