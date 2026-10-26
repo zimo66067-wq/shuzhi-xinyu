@@ -111,7 +111,7 @@ class CompatRow(dict):
 
 
 def compat_row_factory(cursor):
-    names = [col.name for col in cursor.description]
+    names = [col.name for col in (cursor.description or ())]
     def make_row(values):
         return CompatRow(zip(names, values))
     return make_row
