@@ -14,9 +14,13 @@ llm_client.py — LLM 调用层（DeepSeek 单一）
   - 如未来确需多 provider，必须先经产品评审 + 隐私政策（PRIVACY.md）同步更新
 """
 
+import hashlib
+import json
 import logging
 import os
+import re
 import time
+import uuid
 from contextvars import ContextVar
 
 import requests
@@ -51,6 +55,41 @@ def get_last_source() -> str:
     return _last_source.get()
 
 
+def _emit_call_evidence(payload, response, data, api_key, trace_id, started, error=None):
+    """只记录上游调用元数据；不记录密钥、对话、提示或回复正文。"""
+    def tag(value):
+        return value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:/-]{1,160}", value) else None
+
+    try:
+        data = data if isinstance(data, dict) else {}
+        usage = data.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
+        token_counts = {key: usage[key] for key in (
+            "prompt_tokens", "completion_tokens", "total_tokens",
+            "prompt_cache_hit_tokens", "prompt_cache_miss_tokens",
+        ) if type(usage.get(key)) is int and usage[key] >= 0}
+        status = getattr(response, "status_code", None)
+        record = {
+            "event": "provider_failure" if error is not None else "provider_success",
+            "provider": "deepseek",
+            "endpoint": "https://api.deepseek.com/chat/completions",
+            "trace_id": trace_id,
+            "requested_model": tag(payload.get("model")),
+            "response_model": tag(data.get("model")),
+            "completion_id": tag(data.get("id")),
+            "thinking_type": payload.get("thinking", {}).get("type"),
+            "http_status": status if type(status) is int else None,
+            "usage": token_counts,
+            "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+            "key_fingerprint": hashlib.sha256(api_key.encode()).hexdigest()[:16],
+            "error_type": type(error).__name__ if error is not None else None,
+        }
+        print("[LLM_EVIDENCE] " + json.dumps(record, ensure_ascii=True), flush=True)
+    except Exception:
+        # 诊断输出异常不能把一次已成功计费的回复变成业务失败。
+        pass
+
+
 # ── DeepSeek 调用 ─────────────────────────────────────────────────────────
 
 def call_deepseek(
@@ -79,6 +118,9 @@ def call_deepseek(
     if attempt is not None:
         attempt["_clock"] = time.monotonic()
     response = None
+    response_data = None
+    trace_id = uuid.uuid4().hex
+    started = time.monotonic()
     try:
         response = requests.post(
             endpoint,
@@ -86,13 +128,16 @@ def call_deepseek(
             json=payload, timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        response_data = response.json()
+        content = response_data["choices"][0]["message"]["content"]
         if audit.current.get() and (not isinstance(content, str) or not content.strip()):
             raise ValueError("empty upstream content")
     except Exception as exc:
         audit.received(attempt, response, error=exc)
+        _emit_call_evidence(payload, response, response_data, api_key, trace_id, started, error=exc)
         raise
     audit.received(attempt, response, content=content)
+    _emit_call_evidence(payload, response, response_data, api_key, trace_id, started)
     return content
 
 
@@ -116,3 +161,4 @@ def call_llm(system_prompt: str, messages: list[dict]) -> str:
 
     _last_source.set("fallback")
     return FALLBACK_REPLY
+
